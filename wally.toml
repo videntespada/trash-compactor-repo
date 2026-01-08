@@ -1,0 +1,11 @@
+[package]
+name = "ayomo/trashcompactor"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+Janitor = "howmanysmall/janitor@1.18.3"
+Cmdr = "evaera/cmdr@1.12.0"
+ProfileService = "brittonfischer/profileservice@2.1.5"
+TopbarPlus = "1foreverhd/topbarplus@3.4.0"
