@@ -11,8 +11,13 @@ return {
 				EventHandler:fireClient(player, "TestEvent")
 			end)
 		end)
+
+		EventHandler:connect("TestEventServer", function()
+			print("I recieved!")
+		end)
 	end,
 	events = {
 		"TestEvent",
+		"TestEventServer",
 	},
 }

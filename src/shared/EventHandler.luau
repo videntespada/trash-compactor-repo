@@ -99,7 +99,7 @@ function m:connect(name: string, f: (...any) -> ())
 		return result
 	else
 		if not result:HasTag("Busy") and not result:HasTag("ServerConnected") then
-			result.OnClientEvent:Connect(f)
+			result.OnServerEvent:Connect(f)
 			result:AddTag("ServerConnected")
 		end
 		return

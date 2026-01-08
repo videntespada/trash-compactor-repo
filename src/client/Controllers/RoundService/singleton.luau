@@ -10,6 +10,8 @@ return {
 			print("I recieved!")
 			EventHandler:clean("TestEvent")
 		end)
+
+		EventHandler:fire("TestEventServer")
 	end,
 	events = {
 		"TestEvent",
