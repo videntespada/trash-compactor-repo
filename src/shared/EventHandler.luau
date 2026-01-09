@@ -1,5 +1,6 @@
 local m = {}
 
+-- ! Don't use
 function m:clean(name: string)
 	local result = self:getEvent(name)
 
@@ -39,10 +40,10 @@ function m:fireClient(to: Player, name: string, ...: any): string | nil
 	if typeof(result) == "string" then
 		return result
 	else
-		if result:HasTag("Busy") then
-			return `Dropped event named ${name}`
-		end
-		result:AddTag("Busy")
+		-- if result:HasTag("Busy") then
+		-- 	return `Dropped event named ${name}`
+		-- end
+		-- result:AddTag("Busy")
 		result:FireClient(to, ...)
 		return
 	end
@@ -54,10 +55,10 @@ function m:fire(name: string, ...: any)
 	if typeof(result) == "string" then
 		return result
 	else
-		if result:HasTag("Busy") then
-			return `Dropped event named ${name}`
-		end
-		result:AddTag("Busy")
+		-- if result:HasTag("Busy") then
+		-- 	return `Dropped event named ${name}`
+		-- end
+		-- result:AddTag("Busy")
 		result:FireServer(...)
 		return
 	end
@@ -69,10 +70,11 @@ function m:broadcast(name: string, ...: any)
 	if typeof(result) == "string" then
 		return result
 	else
-		if result:HasTag("Busy") then
-			return `Dropped event named ${name}`
-		end
-		result:AddTag("Busy")
+		-- if result:HasTag("Busy") then
+		-- 	warn(`{result} is busy.`)
+		-- 	return
+		-- end
+		-- result:AddTag("Busy")
 		result:FireAllClients(...)
 		return
 	end
@@ -84,7 +86,7 @@ function m:connectClient(name: string, f: (...any) -> ()): string | nil
 	if typeof(result) == "string" then
 		return result
 	else
-		if not result:HasTag("Busy") and not result:HasTag("ClientConnected") then
+		if not result:HasTag("ClientConnected") then
 			result.OnClientEvent:Connect(f)
 			result:AddTag("ClientConnected")
 		end
@@ -98,7 +100,7 @@ function m:connect(name: string, f: (...any) -> ())
 	if typeof(result) == "string" then
 		return result
 	else
-		if not result:HasTag("Busy") and not result:HasTag("ServerConnected") then
+		if not result:HasTag("ServerConnected") then
 			result.OnServerEvent:Connect(f)
 			result:AddTag("ServerConnected")
 		end

@@ -1,11 +1,13 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local types = require(script.Parent.types)
 
 local state: types.RoundStates = "Lobby"
-local lobbyTime = 10
-local intermissionTime = 6
-local roundLength = 30
+local lobbyTime = 60
+local intermissionTime = 15
+local roundLength = 120
 
 local playerStats: { [Player]: {
 	kills: number,
@@ -65,9 +67,11 @@ return {
 				warn("We have enough players, starting")
 
 				for i = 1, lobbyTime do
+					local timeLeft = lobbyTime - i
 					-- Countdown before round starts
+					-- print(`${timeLeft} seconds left until round starts..`)
+					EventHandler:broadcast("changeTimerUI", timeLeft)
 					task.wait(1)
-					print(`${lobbyTime - i} seconds left until round starts..`)
 				end
 
 				transferPlayersToRound()
@@ -77,9 +81,11 @@ return {
 
 			if state == "Intermission" then
 				for i = 1, intermissionTime do
+					local timeLeft = intermissionTime - i
 					-- Show stats, small intermission
+					-- print(`${timeLeft} seconds left for intermission..`)
+					EventHandler:broadcast("changeTimerUI", timeLeft)
 					task.wait(1)
-					print(`${intermissionTime - i} seconds left for intermission..`)
 				end
 				state = "Lobby"
 				continue
@@ -102,17 +108,21 @@ return {
 
 				-- Actual countdown
 				for i = 1, roundLength do
+					local timeLeft = roundLength - i
 					-- ! Show player states every second just as debug
 					local players = getPlayerInRound()
 					for _, player in ipairs(players) do
 						local plrStats = playerStats[player]
 						print(plrStats)
 					end
-					print(`${roundLength - i} seconds left for round`)
+					-- print(`${timeLeft} seconds left for round`)
+					EventHandler:broadcast("changeTimerUI", timeLeft)
 					task.wait(1)
 				end
 			end
 		end
 	end,
-	events = {},
+	events = {
+		"changeTimerUI",
+	},
 }
