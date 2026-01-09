@@ -41,5 +41,5 @@ end
 
 -- invoke all init functions
 for _, v in ipairs(toInit) do
-	v()
+	task.spawn(v)
 end

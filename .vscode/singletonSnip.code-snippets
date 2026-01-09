@@ -1,0 +1,14 @@
+{
+	"singleton": {
+		"prefix": "slg",
+		"body": [
+			"return {",
+			"\tinit = function()",
+			"\t\t$0",
+			"\tend,",
+			"\tevents = {},",
+			"}"
+		],
+		"description": "singleton"
+	}
+}

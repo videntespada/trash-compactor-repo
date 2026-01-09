@@ -10,7 +10,7 @@ local PlayerScripts = player.PlayerScripts
 local Client = PlayerScripts:WaitForChild("Client")
 local Controllers = Client:WaitForChild("Controllers")
 
-local clientLoadEvent = ReplicatedStorage:WaitForChild("Shared"):FindFirstChild("clientLoaded") :: RemoteEvent
+local clientLoadEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("clientLoaded") :: RemoteEvent
 
 type ReturnType = {
 	init: () -> (),

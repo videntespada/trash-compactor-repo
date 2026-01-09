@@ -1,0 +1,27 @@
+{
+	"Luau Class": {
+		"prefix": "class",
+		"scope": "lua, luau",
+		"body": [
+			"local ${1:${TM_FILENAME_BASE/(.)(.*)/${1:/upcase}${2}/}} = {}",
+			"${1}.__index = ${1}",
+			"",
+			"-- Type Definition",
+			"export type ${1} = {",
+			"\t${2:param1}: ${3:any},",
+			"}",
+			"",
+			"-- Constructor",
+			"function ${1}.new(${2}: ${3}): ${1}",
+			"\tlocal self = setmetatable({}, ${1})",
+			"",
+			"\tself.${2} = ${2}",
+			"",
+			"\treturn self :: ${1}",
+			"end",
+			"$0",
+			"return ${1}"
+		],
+		"description": "Creates a strictly typed Luau OOP Class based on filename"
+	}
+}
