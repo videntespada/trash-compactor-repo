@@ -1,57 +1,32 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Selection = game:GetService("Selection")
 
-local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local Fusion = require(ReplicatedStorage.Shared.Fusion)
-local Observer = require(ReplicatedStorage.Shared.Fusion.Graph.Observer)
-local OnChange = require(ReplicatedStorage.Shared.Fusion.Instances.OnChange)
-local OnEvent = require(ReplicatedStorage.Shared.Fusion.Instances.OnEvent)
-local innerScope = require(ReplicatedStorage.Shared.Fusion.Memory.innerScope)
+
+type ModuleFunctionType = (player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: PlayerGui) -> ()
 
 return {
 	init = function()
 		local player = Players.LocalPlayer
-		local gui = player.PlayerGui
-		local scope = Fusion.scoped(Fusion)
+		local gui = player.PlayerGui :: PlayerGui
+		local scope = Fusion.scoped(Fusion) :: Fusion.Scope<typeof(Fusion)>
 
-		local baseUI = gui:WaitForChild("ScreenGui") :: ScreenGui
-		local HUD = baseUI:FindFirstChild("HUD") :: Frame
-		local TopTimerCountDownOver = HUD:FindFirstChild("TopTimerCountDownOver") :: ImageLabel
-		local TimerText = TopTimerCountDownOver:FindFirstChild("TimerText") :: TextLabel
+		local Handlers = script.Parent:WaitForChild("Handlers") :: Folder
 
-		local function toMMSS(seconds: number): string
-			local minutes = math.floor(seconds / 60)
-			local remainingSeconds = math.floor(seconds % 60)
+		local required: { ModuleFunctionType } = {}
 
-			return string.format("%02d:%02d", minutes, remainingSeconds)
+		for _, v in ipairs(Handlers:GetChildren()) do
+			if v:IsA("ModuleScript") then
+				local mod = v :: ModuleScript
+
+				local reqed = require(mod) :: ModuleFunctionType
+				required[1 + #required] = reqed
+			end
 		end
 
-		local states = {
-			rot = scope:Value(0),
-			text = scope:Value(TimerText.Text),
-		}
-
-		scope:Hydrate(TimerText)({
-			Text = scope:Computed(function(use, _)
-				states.rot:set(math.random(-5, 5))
-				task.delay(0.1, function()
-					states.rot:set(0)
-				end)
-				return use(states.text)
-			end),
-			Rotation = scope:Spring(
-				scope:Computed(function(use)
-					return use(states.rot)
-				end),
-				30,
-				0.5
-			),
-		})
-
-		EventHandler:connectClient("changeTimerUI", function(timeLeft: number)
-			states.text:set(toMMSS(timeLeft))
-		end)
+		for _, func in ipairs(required) do
+			func(player, scope, gui)
+		end
 	end,
 	events = {},
 }

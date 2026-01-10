@@ -1,0 +1,19 @@
+{
+	"uiSingleton": {
+		"prefix": "uislg",
+		"body": [
+			"local ReplicatedStorage = game:GetService(\"ReplicatedStorage\")",
+			"local Fusion = require(ReplicatedStorage.Shared.Fusion)",
+			"",
+			"return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: PlayerGui)",
+			"\tlocal baseUI = gui:WaitForChild('${2:ScreenGui}') :: ScreenGui",
+			"\tlocal HUD = baseUI:FindFirstChild(\"${3:HUD}\") :: Frame",
+			"\tlocal ${4:Top} = HUD:FindFirstChild(\"${4:Top}\") :: Frame" ,
+			"\tlocal Content = ${4:Top}:FindFirstChild(\"Content\") :: Frame",
+			"\t",
+			"\t$0",
+			"end"
+		],
+		"description": "Creates a UI Singleton function with Fusion Scope"
+	}
+}

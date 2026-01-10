@@ -8,7 +8,10 @@
         "$path": "Packages"
       },
       "Shared": {
-        "$path": "src/shared"
+        "$path": "src/shared",
+		"clientLoaded": {
+			"$className": "RemoteEvent"
+		}
       }
     },
 
@@ -22,7 +25,10 @@
       "StarterPlayerScripts": {
         "Client": {
           "$path": "src/client"
-        }
+        },
+		"Handlers": {
+			"$path": "src/client/Controllers/UI/Handlers"
+		}
       }
     }
   }

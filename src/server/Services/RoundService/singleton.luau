@@ -1,3 +1,4 @@
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -54,8 +55,18 @@ local function transferPlayersToRound()
 	end
 end
 
+local function changePlayerCount(tag: string)
+	if tag == "InRound" then
+		local amountCount = #CollectionService:GetTagged(tag)
+		EventHandler:broadcast("changePlayerCount", amountCount)
+	end
+end
+
 return {
 	init = function()
+		local _onRemoved = CollectionService.TagRemoved:Connect(changePlayerCount)
+		local _onAdd = CollectionService.TagAdded:Connect(changePlayerCount)
+
 		-- Own loop, since rounds continue indefinitely
 		while true do
 			if state == "Lobby" then
@@ -124,5 +135,6 @@ return {
 	end,
 	events = {
 		"changeTimerUI",
+		"changePlayerCount",
 	},
 }
