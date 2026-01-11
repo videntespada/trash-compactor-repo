@@ -17,7 +17,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 			local targetPos = startPos + offset
 
 			task.spawn(function()
-				local speed = 0.07
+				local speed = 0.8
 
 				local connection
 				connection = RunService.RenderStepped:Connect(function()
@@ -27,7 +27,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 					end
 
 					local currentTime = os.clock() * speed
-					local alpha = ((math.sin(currentTime) * 8) + 1) / 2
+					local alpha = (math.sin(currentTime) + 1) / 2
 
 					bg.Position = startPos:Lerp(targetPos, alpha)
 				end)

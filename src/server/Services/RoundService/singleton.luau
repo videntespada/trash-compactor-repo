@@ -9,18 +9,33 @@ local state: types.RoundStates = "Lobby"
 local lobbyTime = 60
 local intermissionTime = 15
 local roundLength = 120
+local playersNeeded = 3
 
 local playerStats: { [Player]: {
 	kills: number,
 	cash: number,
 } } = {}
 
+local Map = workspace:WaitForChild("Map") :: Folder
+local ScriptableFolder = Map:FindFirstChild("Scriptable") :: Folder
+local ArenaSpawn = ScriptableFolder:FindFirstChild("Arena") :: Part
+local GarbageManSpawn = ScriptableFolder:FindFirstChild("Ramp") :: Part
+
+local function getTotalInRound(): { Player }
+	local t = {}
+	for i = 1, #CollectionService:GetTagged("InRound"), 1 do
+		t[1 + #t] = CollectionService:GetTagged("InRound")[i] :: Player
+	end
+
+	return t
+end
+
 local function checkForPlayers(): boolean
-	local enoughPlayers = #Players:GetPlayers() >= 1
+	local enoughPlayers = #Players:GetPlayers() >= playersNeeded
 
 	if not enoughPlayers then
 		local totalPlayers = #Players:GetPlayers()
-		warn(`Need ${1 - totalPlayers} more players to start.`)
+		warn(`Need ${playersNeeded - totalPlayers} more players to start.`)
 		return false
 	else
 		return true
@@ -38,6 +53,27 @@ local function getPlayerInRound(): { Player }
 	end
 
 	return t
+end
+
+local function teleportPlayers()
+	local r = math.random
+	local size = ArenaSpawn.Size
+
+	local function randomRel()
+		return (r() * 2) - 1
+	end
+
+	for plr, _ in pairs(playerStats) do
+		local character = plr.Character
+		if plr:HasTag("GarbageMan") then
+			character:PivotTo(GarbageManSpawn.CFrame)
+			continue
+		end
+		local offset = Vector3.new((size.X / 2) * randomRel(), size.Y / 2, (size.Z / 2) * randomRel())
+		local possibleSpawn = (ArenaSpawn.CFrame * CFrame.new(offset))
+
+		character:PivotTo(possibleSpawn)
+	end
 end
 
 local function transferPlayersToRound()
@@ -62,6 +98,39 @@ local function changePlayerCount(tag: string)
 	end
 end
 
+local function chooseGarbageMan()
+	local total = 0
+
+	for plr, _ in pairs(playerStats) do
+		local chance = plr:GetAttribute("garbageChance") or 0
+		total += chance
+	end
+
+	if total <= 0 then
+		local players = {}
+		for plr, _ in pairs(playerStats) do
+			table.insert(players, plr)
+		end
+		print(players)
+		local chosen = players[math.random(#players)]
+		chosen:AddTag("GarbageMan")
+		return chosen
+	end
+
+	local randomPoint = math.random() * total
+	local currentCount = 0
+
+	for plr, _ in pairs(playerStats) do
+		local chance = plr:GetAttribute("garbageChance") or 0
+		currentCount += chance
+
+		if currentCount >= randomPoint then
+			plr:AddTag("GarbageMan")
+			return plr
+		end
+	end
+end
+
 return {
 	init = function()
 		local _onRemoved = CollectionService.TagRemoved:Connect(changePlayerCount)
@@ -80,12 +149,18 @@ return {
 				for i = 1, lobbyTime do
 					local timeLeft = lobbyTime - i
 					-- Countdown before round starts
-					-- print(`${timeLeft} seconds left until round starts..`)
 					EventHandler:broadcast("changeTimerUI", timeLeft)
 					task.wait(1)
 				end
 
 				transferPlayersToRound()
+
+				local chosen = chooseGarbageMan()
+				task.wait(4)
+				warn(`${chosen} is the garbage man!`)
+				task.wait(3)
+
+				teleportPlayers()
 				state = "InRound"
 				continue
 			end
@@ -94,7 +169,6 @@ return {
 				for i = 1, intermissionTime do
 					local timeLeft = intermissionTime - i
 					-- Show stats, small intermission
-					-- print(`${timeLeft} seconds left for intermission..`)
 					EventHandler:broadcast("changeTimerUI", timeLeft)
 					task.wait(1)
 				end
@@ -120,13 +194,7 @@ return {
 				-- Actual countdown
 				for i = 1, roundLength do
 					local timeLeft = roundLength - i
-					-- ! Show player states every second just as debug
-					local players = getPlayerInRound()
-					for _, player in ipairs(players) do
-						local plrStats = playerStats[player]
-						print(plrStats)
-					end
-					-- print(`${timeLeft} seconds left for round`)
+
 					EventHandler:broadcast("changeTimerUI", timeLeft)
 					task.wait(1)
 				end

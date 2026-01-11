@@ -11,7 +11,9 @@ return {
 				Data.playerAdded(player)
 
 				-- Everything else
-				
+
+				-- Chance per round
+				player:SetAttribute("garbageChance", 0)
 			end)
 		end)
 	end,
