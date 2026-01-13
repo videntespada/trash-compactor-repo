@@ -6,10 +6,10 @@ local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local types = require(script.Parent.types)
 
 local state: types.RoundStates = "Lobby"
-local lobbyTime = 60
+local lobbyTime = 5
 local intermissionTime = 15
 local roundLength = 120
-local playersNeeded = 3
+local playersNeeded = 1
 
 local playerStats: { [Player]: {
 	kills: number,
@@ -184,6 +184,9 @@ return {
 						local plrStats = playerStats[player]
 
 						-- plrStats.cash whatever
+						if player:HasTag("GarbageMan") then
+							player:RemoveTag("GarbageMan")
+						end
 						player:RemoveTag("InRound")
 					end
 					table.clear(playerStats)
