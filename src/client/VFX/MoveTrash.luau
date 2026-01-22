@@ -1,5 +1,4 @@
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local Map = workspace:WaitForChild("Map")
 local Scriptable = Map:FindFirstChild("Scriptable")
 local SnapParts = Scriptable:FindFirstChild("SnapParts") :: Folder
@@ -14,33 +13,29 @@ refPart.Anchored = true
 refPart.CanCollide = false
 refPart.Size = Vector3.new(2, 2, 2)
 
-local slideInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local snapConnection
 
 local function snapTo(targetPart, toMove)
-	-- 1. Disconnect any existing slide (in case they switch targets fast)
 	if snapConnection then
 		snapConnection:Disconnect()
 		snapConnection = nil
 	end
 
-	-- 2. Start a new temporary loop
+	local _, objectSize = toMove:GetBoundingBox()
+	local yOffset = (targetPart.Size.Y / 2) + (objectSize.Y / 2)
+
 	snapConnection = RunService.RenderStepped:Connect(function(deltaTime)
 		local currentCF = toMove:GetPivot()
-		local targetCF = targetPart.CFrame
 
-		-- 3. Calculate distance to see if we are "close enough" to stop
+		local targetCF = targetPart.CFrame + Vector3.new(0, yOffset, 0)
+
 		local dist = (currentCF.Position - targetCF.Position).Magnitude
-		local angleDist = (currentCF.LookVector - targetCF.LookVector).Magnitude -- Optional rotation check
 
 		if dist < 0.05 then
-			-- WE ARRIVED: Snap to exact position and kill the loop
 			toMove:PivotTo(targetCF)
 			snapConnection:Disconnect()
 			snapConnection = nil
 		else
-			-- STILL MOVING: Lerp 20% of the remaining distance
-			-- (Adjust 0.2 to make it faster/slower)
 			toMove:PivotTo(currentCF:Lerp(targetCF, 0.2))
 		end
 	end)
@@ -92,8 +87,9 @@ return function(type: "Snapped" | "Mouse", character: Model, toMove: Model, mous
 		-- 		v.instance.Material = Enum.Material.SmoothPlastic
 		-- 	end
 		-- end
-		snapTo(closestItem.instance, toMove)
 		table.clear(t)
+		snapTo(closestItem.instance, toMove)
+		return closestItem.instance.Position
 	else
 		if not mousePosition then
 			warn("Debug: mousePosition is nil")
@@ -135,8 +131,10 @@ return function(type: "Snapped" | "Mouse", character: Model, toMove: Model, mous
 		local centerZ = mouseRef.Position.Z
 		local minZ = centerZ - maxOffset
 		local maxZ = centerZ + maxOffset
-
 		local clampedZ = math.clamp(mousePosition.Z, minZ, maxZ)
-		toMove:PivotTo(CFrame.new(Vector3.new(mouseRef.Position.X, mouseRef.Position.Y, clampedZ)))
+		local targetY = mouseRef.Position.Y + (mouseRef.Size.Y / 2) + (size.Y / 2)
+
+		toMove:PivotTo(CFrame.new(Vector3.new(mouseRef.Position.X, targetY, clampedZ)))
+		return toMove:GetPivot().Position
 	end
 end

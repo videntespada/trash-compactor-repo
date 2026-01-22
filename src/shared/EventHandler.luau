@@ -59,6 +59,7 @@ function m:fire(name: string, ...: any)
 		-- 	return `Dropped event named ${name}`
 		-- end
 		-- result:AddTag("Busy")
+		-- print(...)
 		result:FireServer(...)
 		return
 	end

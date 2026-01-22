@@ -1,17 +1,65 @@
+local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Fusion = require(ReplicatedStorage.Shared.Fusion)
-local Spring = require(ReplicatedStorage.Shared.Fusion.Animation.Spring)
 local OnEvent = require(ReplicatedStorage.Shared.Fusion.Instances.OnEvent)
 
 return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: PlayerGui)
 	local baseUI = gui:WaitForChild("ScreenGui") :: ScreenGui
 	local HUD = baseUI:FindFirstChild("HUD") :: Frame
+	local UIFolder = script:FindFirstAncestor("UI") :: Folder
+	local ButtonEvents = UIFolder:FindFirstChild("ButtonEvents") :: Folder
+	local toActivate: { [string]: (player: Player, ...any) -> () } = {}
+
+	local function onActivate(name: string)
+		toActivate[name](player)
+	end
+
+	local function getDeviceType(): string
+		if GuiService:IsTenFootInterface() then
+			return "Console"
+		elseif UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
+			return "Mobile"
+		else
+			return "PC"
+		end
+	end
+
+	local function checkIfMobile(button: GuiButton)
+		--* If its a mobile only button
+		if button:HasTag("Mobile") then
+			local platform = getDeviceType()
+
+			-- If already mobile, leave visible
+			if platform == "Mobile" then
+				return
+			end
+
+			-- If not mobile, force visible = false
+			if button.Name == "Main" then
+				local frameParent = button.Parent :: Frame
+				frameParent.Visible = false
+			elseif button.Name ~= "Main" then
+				button.Visible = false
+			end
+		end
+	end
+
+	for _, v in ipairs(ButtonEvents:GetChildren() :: { ModuleScript }) do
+		local func = require(v) :: () -> ()
+
+		toActivate[v.Name] = func
+	end
+
+	print(toActivate)
 
 	-- ! Rotation breaks background!!!
 	for _, v in ipairs(HUD:GetDescendants()) do
 		if v:IsA("ImageButton") or v:IsA("TextButton") then
 			local button = v
+
+			checkIfMobile(button)
 
 			-- If button is named "Main", then hydrate parent instead of button iself
 			if button.Name == "Main" then
@@ -69,6 +117,10 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 						task.delay(0.1, function()
 							state.size:set(state.baseSize)
 						end)
+
+						-- Find event to fire
+						print(button:GetTags()[1])
+						onActivate(button:GetTags()[1])
 					end,
 				})
 			else
@@ -123,6 +175,9 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 						task.delay(0.1, function()
 							state.size:set(state.baseSize)
 						end)
+						-- Find event to fire
+						print(button:GetTags()[1])
+						onActivate(button:GetTags()[1])
 					end,
 				})
 			end

@@ -11,6 +11,9 @@
         "$path": "src/shared",
 		"clientLoaded": {
 			"$className": "RemoteEvent"
+		},
+		"Ragdoll": {
+			"$className": "RemoteEvent"
 		}
       }
     },
@@ -20,6 +23,12 @@
         "$path": "src/server"
       }
     },
+
+	"StarterGui": {
+		"InputActions": {
+			"$className": "Folder"
+		}
+	},
 
     "StarterPlayer": {
       "StarterPlayerScripts": {

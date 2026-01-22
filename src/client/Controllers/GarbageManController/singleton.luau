@@ -1,5 +1,3 @@
-local ClusterPacketCache = game:GetService("ClusterPacketCache")
-local FeatureRestrictionManager = game:GetService("FeatureRestrictionManager")
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,15 +7,31 @@ local UserInputService = game:GetService("UserInputService")
 
 local MoveTrash = require(StarterPlayer.StarterPlayerScripts.Client.VFX.MoveTrash)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
-local packType = require(ReplicatedStorage.Shared.Fusion.Animation.packType)
 local Assets = ReplicatedStorage:WaitForChild("Assets")
 local TrashAssets = Assets:FindFirstChild("Trash") :: Folder
 
 return {
 	init = function()
 		local player = Players.LocalPlayer
+		local gui = player.PlayerGui
 		local character = player.Character
 		local currentModel: Model
+
+		-- IAS Stuff
+		local InputActions = gui:WaitForChild("InputActions") :: Folder
+		local ThrowTrashAction = InputActions:FindFirstChild("ThrowTrash") :: InputAction
+
+		if not InputActions then
+			warn("Unable to find InputActions")
+		end
+
+		-- Throw Button stuff
+		local UIButton = (ThrowTrashAction["InputBinding"] :: InputBinding).UIButton
+		local parentFrame = UIButton.Parent :: Frame
+
+		ThrowTrashAction.Enabled = false
+		parentFrame.Visible = false
+
 		local function getDeviceType(): string
 			if GuiService:IsTenFootInterface() then
 				return "Console"
@@ -46,29 +60,39 @@ return {
 			-- Check platform.
 			if toggle then
 				local platform = getDeviceType()
-				print(`Player is on ${platform}`)
+
+				if platform == "Mobile" or platform == "Console" then
+					parentFrame.Visible = true
+				end
+
+				-- print(`Player is on ${platform}`)
+
+				-- Turn on their action
+				ThrowTrashAction.Enabled = true
+
 				if platform == "Mobile" or platform == "Console" then
 					connection = RunService.Heartbeat:Connect(function()
 						if currentModel == nil then
-							print("Not doing anything, no model to place.")
+							-- print("Not doing anything, no model to place.")
 							return
 						end
 						attachVisulization()
-						MoveTrash("Snapped", character, currentModel)
+						local pos = MoveTrash("Snapped", character, currentModel)
 					end)
 				else
 					local mouse = player:GetMouse()
 
 					connection = RunService.Heartbeat:Connect(function()
 						if currentModel == nil then
-							print("Not doing anything, no model to place.")
+							-- print("Not doing anything, no model to place.")
 							return
 						end
 						attachVisulization()
-						MoveTrash("Mouse", character, currentModel, mouse.Hit.Position)
+						local pos = MoveTrash("Mouse", character, currentModel, mouse.Hit.Position)
 					end)
 				end
 			else
+				ThrowTrashAction.Enabled = false
 				connection:Disconnect()
 			end
 		end)
@@ -82,8 +106,20 @@ return {
 					end
 				end
 				found.Parent = workspace["Ignore"]
+				if currentModel ~= nil then
+					currentModel:Destroy()
+				end
 				currentModel = found
 			end
+		end)
+
+		if not ThrowTrashAction then
+			warn("TrashAction not found")
+			return
+		end
+		ThrowTrashAction.Released:Connect(function()
+			-- print("Acticated Trash Action")
+			EventHandler:fire("throwTrash", currentModel:GetPivot())
 		end)
 	end,
 	events = {},
