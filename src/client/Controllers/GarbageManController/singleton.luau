@@ -15,7 +15,7 @@ return {
 		local player = Players.LocalPlayer
 		local gui = player.PlayerGui
 		local character = player.Character
-		local currentModel: Model
+		local currentModel: Model?
 
 		-- IAS Stuff
 		local InputActions = gui:WaitForChild("InputActions") :: Folder
@@ -43,6 +43,9 @@ return {
 		end
 
 		local function attachVisulization()
+			if not currentModel then
+				return
+			end
 			if not currentModel:HasTag("visualized") then
 				local highlight = Instance.new("Highlight")
 				highlight.Parent = currentModel
@@ -67,9 +70,10 @@ return {
 
 				-- print(`Player is on ${platform}`)
 
-				-- Turn on their action
+				-- ? Turn on their action
 				ThrowTrashAction.Enabled = true
 
+				-- ? Detect platform and initialize
 				if platform == "Mobile" or platform == "Console" then
 					connection = RunService.Heartbeat:Connect(function()
 						if currentModel == nil then
@@ -92,6 +96,10 @@ return {
 					end)
 				end
 			else
+				if currentModel then
+					currentModel:Destroy()
+					currentModel = nil
+				end
 				ThrowTrashAction.Enabled = false
 				connection:Disconnect()
 			end
@@ -119,6 +127,9 @@ return {
 		end
 		ThrowTrashAction.Released:Connect(function()
 			-- print("Acticated Trash Action")
+			if not currentModel then
+				return
+			end
 			EventHandler:fire("throwTrash", currentModel:GetPivot())
 		end)
 	end,

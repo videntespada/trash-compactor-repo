@@ -3,22 +3,28 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
+local nameOf = require(ReplicatedStorage.Shared.Fusion.Utility.nameOf)
+local RagdollModule = require(ReplicatedStorage.Shared.RagdollModule)
 local types = require(script.Parent.types)
 
 local state: types.RoundStates = "Lobby"
-local currentEvent: types.EventStates = "None"
-local lobbyTime = 30
+local currentEvent: types.EventStates = "Avalanche"
+local lobbyTime = 15
 local intermissionTime = 5
-local roundLength = 60
+local roundLength = 15
 local playersNeeded = 2
 
 local playerStats: { [Player]: {
 	kills: number,
 	cash: number,
 } } = {}
+local eventFunctions: { [string]: () -> () } = {}
 
 local AliveFolder = workspace:WaitForChild("Alive") :: Folder
+local IgnoreFolder = workspace:WaitForChild("Ignore") :: Folder
+local IgnoreTrashFolder = IgnoreFolder:FindFirstChild("Trash") :: Folder
 local Map = workspace:WaitForChild("Map") :: Folder
+local RoundEvents = script.Parent:FindFirstChild("RoundEvents") :: Folder
 local ScriptableFolder = Map:FindFirstChild("Scriptable") :: Folder
 local FirePit = ScriptableFolder:FindFirstChild("Fire") :: Part
 local ArenaSpawn = ScriptableFolder:FindFirstChild("Arena") :: Part
@@ -189,6 +195,8 @@ local function onTouch(hitPart: BasePart)
 
 	-- warn(`[FirePit] KILLING {player.Name}! They were valid and InRound.`)
 
+	RagdollModule.Ragdoll(characterModel)
+
 	-- ? Get total amount to remove, and kill
 	humanoid:TakeDamage(humanoid.MaxHealth)
 
@@ -201,10 +209,17 @@ return {
 		local _onRemoved = CollectionService.TagRemoved:Connect(changePlayerCount)
 		local _onAdd = CollectionService.TagAdded:Connect(changePlayerCount)
 
-		-- Setup fire pit
+		-- ? Setup fire pit
 		FirePit.Touched:Connect(onTouch)
 
-		-- Own loop, since rounds continue indefinitely
+		-- ? Load events
+		local eventList = RoundEvents:GetChildren() :: { ModuleScript }
+		for _, module in ipairs(eventList) do
+			local f = require(module) :: () -> ()
+			eventFunctions[module.Name] = f
+		end
+
+		-- ? Own loop, since rounds continue indefinitely
 		while true do
 			if state == "Lobby" then
 				local sounds = {
@@ -290,7 +305,8 @@ return {
 
 					local alivePlayers = Players:QueryDescendants(".InRound:not(.GarbageMan)") :: { Player }
 					if #alivePlayers <= 0 then
-						teleportPlayers("Spawn")
+						-- ! Might be useless
+						-- teleportPlayers("Spawn")
 						break
 					end
 
@@ -298,6 +314,10 @@ return {
 					-- TODO: Make Avalanche Event
 					-- TODO: Make Fog Event
 					if currentEvent ~= "None" then
+						task.spawn(function()
+							eventFunctions[currentEvent]()
+						end)
+						currentEvent = "None"
 					end
 
 					task.wait(1)
@@ -309,6 +329,7 @@ return {
 				end
 
 				-- ! Round End
+				teleportPlayers("Spawn")
 				local players = getPlayerInRound()
 				for _, player in ipairs(players) do
 					-- TODO: Check stats/award cash here
@@ -317,6 +338,10 @@ return {
 					removeFromRound(player)
 				end
 				table.clear(playerStats)
+
+				for _, v in ipairs(IgnoreTrashFolder:GetChildren()) do
+					v:Destroy()
+				end
 
 				local endSound = Instance.new("Sound")
 				endSound.Parent = workspace

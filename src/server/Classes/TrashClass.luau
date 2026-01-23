@@ -17,7 +17,7 @@ export type TrashClass = {
 	_bounding: Part?,
 
 	StartHitbox: (self: TrashClass) -> (),
-	CreateBounding: (self: TrashClass) -> (),
+	CreateBounding: (self: TrashClass) -> string?,
 	Clean: (self: TrashClass) -> (),
 	new: (model: Model, debug: boolean) -> TrashClass,
 }
@@ -58,8 +58,7 @@ function TrashClass:CreateBounding()
 	local center = model.PrimaryPart
 
 	if not center then
-		warn("[TrashClass] Model has no PrimaryPart!")
-		return
+		return "[TrashClass] Model has no PrimaryPart!"
 	end
 
 	local pivot, modelSize = model:GetBoundingBox()
@@ -73,7 +72,7 @@ function TrashClass:CreateBounding()
 	box.CFrame = pivot
 
 	if self.debug then
-		box.Transparency = 0.5
+		box.Transparency = 0.7
 		box.Color = Color3.fromRGB(255, 0, 0)
 		box.Material = Enum.Material.Neon
 	else
@@ -88,6 +87,7 @@ function TrashClass:CreateBounding()
 	weld.Parent = model
 
 	self._bounding = box
+	return
 end
 
 -- Start hitbox
@@ -123,7 +123,7 @@ function TrashClass:StartHitbox()
 		end
 
 		local player = Players:GetPlayerFromCharacter(characterModel)
-		if not player or not player:HasTag("InRound") then
+		if not player or not player:HasTag("InRound") or player:HasTag("GarbageMan") then
 			return
 		end
 

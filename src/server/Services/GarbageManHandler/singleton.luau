@@ -7,6 +7,9 @@ local TrashClass = require(ServerScriptService.Server.Classes.TrashClass)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 return {
 	init = function()
+		local Map = workspace:WaitForChild("Map") :: Folder
+		local Scriptable = Map:FindFirstChild("Scriptable") :: Folder
+		local PlaceZone = Scriptable:FindFirstChild("PlaceZone") :: Part
 		local Assets = ReplicatedStorage:WaitForChild("Assets")
 		local TrashAssets = Assets:FindFirstChild("Trash") :: Folder
 		local toThrow: Model
@@ -41,7 +44,7 @@ return {
 			local bv = Instance.new("BodyVelocity")
 			bv.Parent = toThrow:FindFirstChild("Part") :: Part
 			bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
-			bv.Velocity = (character:GetPivot().LookVector * 50) + Vector3.yAxis * 20
+			bv.Velocity = (PlaceZone.CFrame.RightVector * -30) + Vector3.yAxis * 20
 			Debris:AddItem(bv, 0.1)
 
 			-- Attach TrashClass for behavior
@@ -66,11 +69,10 @@ return {
 			EventHandler:fireClient(player, "changeTrash", chosen.Name)
 		end)
 
-		-- Enabling/Disaibling mechanics.
-		CollectionService.TagAdded:Connect(function(tag)
-			if tag == "GarbageMan" then
-				local tagged = CollectionService:GetTagged(tag)
-				local player = tagged[1] :: Player
+		-- ? Enabling/Disaibling mechanics.
+		CollectionService:GetInstanceAddedSignal("GarbageMan"):Connect(function(a)
+			if a:IsA("Player") then
+				local player = a
 
 				-- ! Enable
 				task.wait(6)
@@ -82,10 +84,9 @@ return {
 			end
 		end)
 
-		CollectionService.TagRemoved:Connect(function(tag)
-			if tag == "GarbageMan" then
-				local player = CollectionService:GetTagged(tag) :: Player
-
+		CollectionService:GetInstanceRemovedSignal("GarbageMan"):Connect(function(a)
+			if a:IsA("Player") then
+				local player = a
 				-- ! Disaible
 				print("disaibling")
 				EventHandler:fireClient(player, "toggleGarbageVisualization", false)
