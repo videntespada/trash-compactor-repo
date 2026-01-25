@@ -123,7 +123,12 @@ function TrashClass:StartHitbox()
 		end
 
 		local player = Players:GetPlayerFromCharacter(characterModel)
-		if not player or not player:HasTag("InRound") or player:HasTag("GarbageMan") then
+		if not player or player:HasTag("GarbageMan") then
+			return
+		end
+
+		if not player:HasTag("InRound") then
+			warn(`[TrashClass] Hit {player.Name} but they have no InRound tag!`)
 			return
 		end
 
@@ -153,6 +158,8 @@ function TrashClass:StartHitbox()
 				sound.SoundId = `rbxassetid://{deathSounds[math.random(1, #deathSounds)]}`
 				sound:Play()
 				Debris:AddItem(sound, 5)
+
+				player:RemoveTag("InRound")
 			end
 
 			-- ? impact sounds

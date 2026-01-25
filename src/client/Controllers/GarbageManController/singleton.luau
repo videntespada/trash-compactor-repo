@@ -1,3 +1,4 @@
+-- # GarbageManController (Client)
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,24 +14,23 @@ local TrashAssets = Assets:FindFirstChild("Trash") :: Folder
 return {
 	init = function()
 		local player = Players.LocalPlayer
-		local gui = player.PlayerGui
-		local character = player.Character
+		-- Do not store static references to GUI here, they die on respawn.
+
 		local currentModel: Model?
+		local connection: RBXScriptConnection? = nil
+		local throwConnection: RBXScriptConnection? = nil
 
-		-- IAS Stuff
-		local InputActions = gui:WaitForChild("InputActions") :: Folder
-		local ThrowTrashAction = InputActions:FindFirstChild("ThrowTrash") :: InputAction
-
-		if not InputActions then
-			warn("Unable to find InputActions")
+		-- HELPER: Always get the LIVE InputActions
+		local function getThrowAction()
+			local gui = player:WaitForChild("PlayerGui")
+			-- Increased timeout to 10 just to be safe on slow loads
+			local actions = gui:WaitForChild("InputActions", 10)
+			if not actions then
+				warn("[Controller] Critical: InputActions folder not found!")
+				return nil
+			end
+			return actions:FindFirstChild("ThrowTrash")
 		end
-
-		-- Throw Button stuff
-		local UIButton = (ThrowTrashAction["InputBinding"] :: InputBinding).UIButton
-		local parentFrame = UIButton.Parent :: Frame
-
-		ThrowTrashAction.Enabled = false
-		parentFrame.Visible = false
 
 		local function getDeviceType(): string
 			if GuiService:IsTenFootInterface() then
@@ -58,79 +58,123 @@ return {
 			end
 		end
 
-		local connection
-		EventHandler:connectClient("toggleGarbageVisualization", function(toggle: boolean)
-			-- Check platform.
-			if toggle then
-				local platform = getDeviceType()
+		-- Cleans up connections/UI but OPTIONALLY keeps the model
+		local function cleanup(destroyModel: boolean)
+			if destroyModel and currentModel then
+				currentModel:Destroy()
+				currentModel = nil
+			end
 
-				if platform == "Mobile" or platform == "Console" then
-					parentFrame.Visible = true
-				end
-
-				-- print(`Player is on ${platform}`)
-
-				-- ? Turn on their action
-				ThrowTrashAction.Enabled = true
-
-				-- ? Detect platform and initialize
-				if platform == "Mobile" or platform == "Console" then
-					connection = RunService.Heartbeat:Connect(function()
-						if currentModel == nil then
-							-- print("Not doing anything, no model to place.")
-							return
-						end
-						attachVisulization()
-						local pos = MoveTrash("Snapped", character, currentModel)
-					end)
-				else
-					local mouse = player:GetMouse()
-
-					connection = RunService.Heartbeat:Connect(function()
-						if currentModel == nil then
-							-- print("Not doing anything, no model to place.")
-							return
-						end
-						attachVisulization()
-						local pos = MoveTrash("Mouse", character, currentModel, mouse.Hit.Position)
-					end)
-				end
-			else
-				if currentModel then
-					currentModel:Destroy()
-					currentModel = nil
-				end
-				ThrowTrashAction.Enabled = false
+			if connection then
 				connection:Disconnect()
+				connection = nil
+			end
+			if throwConnection then
+				throwConnection:Disconnect()
+				throwConnection = nil
+			end
+
+			-- Disable UI
+			local action = getThrowAction()
+			if action then
+				action.Enabled = false
+				local binding = action:FindFirstChild("InputBinding")
+				if binding and binding:FindFirstChild("UIButton") then
+					binding.UIButton.Parent.Visible = false
+				end
+			end
+		end
+
+		-- Initial cleanup on load
+		cleanup(true)
+
+		-- Handle Respawn: When player dies, ensure UI is reset
+		player.CharacterAdded:Connect(function()
+			cleanup(true)
+		end)
+
+		EventHandler:connectClient("toggleGarbageVisualization", function(toggle: boolean)
+			print(`[Controller] Toggle Visualization: {toggle}`)
+
+			if toggle then
+				-- FIX: Pass 'false' so we DON'T destroy the model the server just sent us
+				cleanup(false)
+
+				local platform = getDeviceType()
+				local character = player.Character or player.CharacterAdded:Wait()
+
+				-- Get Fresh Action
+				local ThrowTrashAction = getThrowAction()
+				if not ThrowTrashAction then
+					return
+				end
+
+				-- Enable Action
+				ThrowTrashAction.Enabled = true
+				if platform == "Mobile" or platform == "Console" then
+					local binding = ThrowTrashAction:FindFirstChild("InputBinding")
+					if binding and binding:FindFirstChild("UIButton") then
+						binding.UIButton.Parent.Visible = true
+					end
+				end
+
+				-- Connect Input
+				throwConnection = ThrowTrashAction.Released:Connect(function()
+					if not currentModel then
+						warn("[Controller] Clicked, but currentModel is nil!")
+						return
+					end
+					EventHandler:fire("throwTrash", currentModel:GetPivot())
+				end)
+
+				-- Connect Visual Loop
+				connection = RunService.Heartbeat:Connect(function()
+					if not currentModel then
+						return
+					end
+
+					-- Handle respawn mid-round edge case
+					if not character or not character.Parent then
+						character = player.Character
+						return
+					end
+
+					attachVisulization()
+
+					if platform == "Mobile" or platform == "Console" then
+						MoveTrash("Snapped", character, currentModel)
+					else
+						local mouse = player:GetMouse()
+						MoveTrash("Mouse", character, currentModel, mouse.Hit.Position)
+					end
+				end)
+			else
+				-- Disable: Pass 'true' to destroy the model
+				cleanup(true)
 			end
 		end)
 
 		EventHandler:connectClient("changeTrash", function(to: string)
-			local found = TrashAssets:FindFirstChild(to, true):Clone()
-			if found then
+			print(`[Controller] Changing trash to: {to}`)
+
+			local original = TrashAssets:FindFirstChild(to, true)
+			if original then
+				if currentModel then
+					currentModel:Destroy()
+				end
+
+				local found = original:Clone()
 				for _, v in found:GetChildren() do
 					if v:IsA("Part") or v:IsA("MeshPart") then
 						v.Anchored = true
+						v.CanCollide = false
 					end
 				end
-				found.Parent = workspace["Ignore"]
-				if currentModel ~= nil then
-					currentModel:Destroy()
-				end
+				found.Parent = workspace:FindFirstChild("Ignore") or workspace
 				currentModel = found
+			else
+				warn(`[Controller] Could not find trash asset: {to}`)
 			end
-		end)
-
-		if not ThrowTrashAction then
-			warn("TrashAction not found")
-			return
-		end
-		ThrowTrashAction.Released:Connect(function()
-			-- print("Acticated Trash Action")
-			if not currentModel then
-				return
-			end
-			EventHandler:fire("throwTrash", currentModel:GetPivot())
 		end)
 	end,
 	events = {},

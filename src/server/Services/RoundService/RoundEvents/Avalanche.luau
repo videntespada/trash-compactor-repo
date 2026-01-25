@@ -2,10 +2,9 @@ local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-local Workspace = game:GetService("Workspace")
 
 local TrashClass = require(ServerScriptService.Server.Classes.TrashClass)
-local Ignore = Workspace:WaitForChild("Ignore") :: Folder
+local Ignore = workspace:WaitForChild("Ignore") :: Folder
 local TrashIgnore = Ignore:FindFirstChild("Trash") :: Folder
 local Assets = ReplicatedStorage:FindFirstChild("Assets") :: Folder
 local TrashAssets = Assets:FindFirstChild("Trash") :: Folder

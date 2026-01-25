@@ -198,5 +198,3 @@ function module.Unragdoll(char: CharacterMesh) -- again, the character
 end
 
 return module
-
--- fr fr, forum: "https://devforum.roblox.com/t/emilios-ragdoll-module-easy-ahh-ragdolls-r15-and-r6/2865426"

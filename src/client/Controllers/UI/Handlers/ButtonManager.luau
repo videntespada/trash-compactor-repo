@@ -10,10 +10,10 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	local HUD = baseUI:FindFirstChild("HUD") :: Frame
 	local UIFolder = script:FindFirstAncestor("UI") :: Folder
 	local ButtonEvents = UIFolder:FindFirstChild("ButtonEvents") :: Folder
-	local toActivate: { [string]: (player: Player, ...any) -> () } = {}
+	local toActivate: { [string]: (player: Player, from: GuiButton, ...any) -> () } = {}
 
-	local function onActivate(name: string)
-		toActivate[name](player)
+	local function onActivate(name: string, button: GuiButton)
+		toActivate[name](player, button)
 	end
 
 	local function getDeviceType(): string
@@ -55,7 +55,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	print(toActivate)
 
 	-- ! Rotation breaks background!!!
-	for _, v in ipairs(HUD:GetDescendants()) do
+	for _, v in ipairs(baseUI:GetDescendants()) do
 		if v:IsA("ImageButton") or v:IsA("TextButton") then
 			local button = v
 
@@ -120,7 +120,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 
 						-- Find event to fire
 						print(button:GetTags()[1])
-						onActivate(button:GetTags()[1])
+						onActivate(button:GetTags()[1], button)
 					end,
 				})
 			else
@@ -177,7 +177,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 						end)
 						-- Find event to fire
 						print(button:GetTags()[1])
-						onActivate(button:GetTags()[1])
+						onActivate(button:GetTags()[1], button)
 					end,
 				})
 			end

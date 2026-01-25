@@ -7,7 +7,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	local baseUI = gui:WaitForChild("ScreenGui") :: ScreenGui
 	local HUD = baseUI:FindFirstChild("HUD") :: Frame
 
-	for _, v in ipairs(HUD:GetDescendants()) do
+	for _, v in ipairs(baseUI:GetDescendants()) do
 		if v:FindFirstChild("BG") then
 			local bg = v:FindFirstChild("BG") :: ImageLabel
 

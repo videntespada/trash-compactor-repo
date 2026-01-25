@@ -30,6 +30,10 @@ return {
 				return
 			end
 
+			if not toThrow or not toThrow.Parent then
+				toThrow = chooseNewTrash()
+			end
+
 			-- Debounce
 			player:AddTag("ThrowDB")
 			task.delay(1, function()
@@ -48,7 +52,7 @@ return {
 			Debris:AddItem(bv, 0.1)
 
 			-- Attach TrashClass for behavior
-			local trashClass = TrashClass.new(toThrow, false)
+			local trashClass = TrashClass.new(toThrow, true)
 			trashClass:CreateBounding()
 			trashClass:StartHitbox()
 			Debris:AddItem(toThrow, 5)

@@ -2,29 +2,41 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Charm = require(ReplicatedStorage.Packages.Charm)
+local atom = Charm.atom
+local subscribe = Charm.subscribe
+local computed = Charm.computed
+
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
-local nameOf = require(ReplicatedStorage.Shared.Fusion.Utility.nameOf)
 local RagdollModule = require(ReplicatedStorage.Shared.RagdollModule)
 local types = require(script.Parent.types)
 
-local state: types.RoundStates = "Lobby"
-local currentEvent: types.EventStates = "Avalanche"
+local roundState: Charm.Atom<types.RoundStates> = atom("None")
+local eventQueue: Charm.Atom<{ types.EventStates }> = atom({
+	"Avalanche"
+})
+local timeCounter: Charm.Atom<number> = atom(0)
+local playerCounter: Charm.Atom<number> = atom(0)
+local playerStates: Charm.Atom<{
+	[Player]: {
+		kills: number,
+		cash: number,
+	},
+}> = atom({})
+local isProcessingEvents: Charm.Atom<boolean> = atom(false)
+
 local lobbyTime = 15
 local intermissionTime = 5
-local roundLength = 15
+local roundLength = 600
 local playersNeeded = 2
 
-local playerStats: { [Player]: {
-	kills: number,
-	cash: number,
-} } = {}
-local eventFunctions: { [string]: () -> () } = {}
+local eventFunctions: { [string]: (...any) -> () } = {}
 
 local AliveFolder = workspace:WaitForChild("Alive") :: Folder
 local IgnoreFolder = workspace:WaitForChild("Ignore") :: Folder
 local IgnoreTrashFolder = IgnoreFolder:FindFirstChild("Trash") :: Folder
 local Map = workspace:WaitForChild("Map") :: Folder
-local RoundEvents = script.Parent:FindFirstChild("RoundEvents") :: Folder
+local RoundEvents = script.Parent:WaitForChild("RoundEvents") :: Folder
 local ScriptableFolder = Map:FindFirstChild("Scriptable") :: Folder
 local FirePit = ScriptableFolder:FindFirstChild("Fire") :: Part
 local ArenaSpawn = ScriptableFolder:FindFirstChild("Arena") :: Part
@@ -43,29 +55,16 @@ local function checkForPlayers(): boolean
 	end
 end
 
-local function getPlayerInRound(): { Player }
-	local t = {}
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		if not player:HasTag("InRound") then
-			continue
-		end
-		t[1 + #t] = player
+local function teleportPlayers(to: "Round" | "Spawn")
+	local r = math.random
+	local t = playerStates()
+	local function randomRel()
+		return (r() * 2) - 1
 	end
 
-	return t
-end
-
-local function teleportPlayers(to: "Round" | "Spawn")
 	if to == "Round" then
-		local r = math.random
 		local size = ArenaSpawn.Size
-
-		local function randomRel()
-			return (r() * 2) - 1
-		end
-
-		for plr, _ in pairs(playerStats) do
+		for plr, _ in pairs(t) do
 			local character = plr.Character
 			if plr:HasTag("GarbageMan") then
 				character:PivotTo(GarbageManSpawn.CFrame)
@@ -77,14 +76,9 @@ local function teleportPlayers(to: "Round" | "Spawn")
 			character:PivotTo(possibleSpawn)
 		end
 	else
-		local r = math.random
 		local size = LobbySpawn.Size
 
-		local function randomRel()
-			return (r() * 2) - 1
-		end
-
-		for plr, _ in pairs(playerStats) do
+		for plr, _ in pairs(t) do
 			local character = plr.Character
 			local offset = Vector3.new((size.X / 2) * randomRel(), size.Y / 2, (size.Z / 2) * randomRel())
 			local possibleSpawn = (LobbySpawn.CFrame * CFrame.new(offset))
@@ -96,10 +90,14 @@ end
 
 function addToRound(player: Player)
 	player:AddTag("InRound")
-	playerStats[player] = {
-		cash = 0,
-		kills = 0,
-	}
+	playerStates(function(new)
+		new = table.clone(new)
+		new[player] = {
+			cash = 0,
+			kills = 0,
+		}
+		return new
+	end)
 end
 
 function removeFromRound(player: Player)
@@ -107,7 +105,11 @@ function removeFromRound(player: Player)
 		player:RemoveTag("GarbageMan")
 	end
 	player:RemoveTag("InRound")
-	playerStats[player] = nil
+	playerStates(function(new): { [Player]: { cash: number, kills: number } }
+		new = table.clone(new)
+		new[player] = nil
+		return new
+	end)
 end
 
 local function transferPlayersToRound()
@@ -122,22 +124,23 @@ end
 
 local function changePlayerCount(tag: string)
 	if tag == "InRound" then
-		local amountCount = #CollectionService:GetTagged(tag)
-		EventHandler:broadcast("changePlayerCount", amountCount)
+		local amount = #CollectionService:GetTagged(tag)
+		playerCounter(amount)
 	end
 end
 
 local function chooseGarbageMan()
 	local total = 0
+	local t = playerStates()
 
-	for plr, _ in pairs(playerStats) do
+	for plr, _ in pairs(t) do
 		local chance = plr:GetAttribute("garbageChance") or 0
 		total += chance
 	end
 
 	if total <= 0 then
 		local players = {}
-		for plr, _ in pairs(playerStats) do
+		for plr, _ in pairs(t) do
 			table.insert(players, plr)
 		end
 		print(players)
@@ -149,7 +152,7 @@ local function chooseGarbageMan()
 	local randomPoint = math.random() * total
 	local currentCount = 0
 
-	for plr, _ in pairs(playerStats) do
+	for plr, _ in pairs(t) do
 		local chance = plr:GetAttribute("garbageChance") or 0
 		currentCount += chance
 
@@ -158,6 +161,8 @@ local function chooseGarbageMan()
 			return plr
 		end
 	end
+
+	return nil
 end
 
 local function onTouch(hitPart: BasePart)
@@ -204,6 +209,47 @@ local function onTouch(hitPart: BasePart)
 	removeFromRound(player)
 end
 
+local function processQueue()
+	if isProcessingEvents() then
+		return
+	end
+
+	isProcessingEvents(true)
+
+	task.spawn(function()
+		while roundState() == "InRound" do
+			local queue = eventQueue()
+
+			-- ? if empty, stop
+			if #queue == 0 then
+				break
+			end
+
+			local nextEventName = queue[1]
+
+			-- ? Pop first
+			eventQueue(function(old): { "Avalanche" | "Fog" | "Ice" | "None" }
+				local new = table.clone(old)
+				table.remove(new, 1)
+				return new
+			end)
+
+			local handler = eventFunctions[nextEventName]
+			if handler then
+				handler()
+			end
+
+			if roundState() ~= "InRound" then
+				break
+			end
+
+			task.wait(1)
+		end
+
+		isProcessingEvents(false)
+	end)
+end
+
 return {
 	init = function()
 		local _onRemoved = CollectionService.TagRemoved:Connect(changePlayerCount)
@@ -219,141 +265,115 @@ return {
 			eventFunctions[module.Name] = f
 		end
 
-		-- ? Own loop, since rounds continue indefinitely
-		while true do
-			if state == "Lobby" then
+		-- ? UI change for timer
+		subscribe(timeCounter, function(count, _prev)
+			EventHandler:broadcast("changeTimerUI", count)
+		end)
+
+		-- ? UI change for players
+		subscribe(playerCounter, function(count, _prev)
+			EventHandler:broadcast("changePlayerCount", count)
+		end)
+
+		-- ? Sound Logic
+		local currentMusic = nil
+		-- Runs whenever roundState changes.
+		local currentMusicId = computed(function()
+			local s = roundState() :: types.RoundStates
+			if s == "Lobby" then
 				local sounds = {
 					"1848354536",
 					"1841647093",
 					"9047876673",
 				}
-
-				local currentMusic = nil
 				local randomId = sounds[math.random(1, #sounds)]
+				return `rbxassetid://{randomId}`
+			elseif s == "InRound" then
+				return `rbxassetid://1846458016`
+			elseif s == "Intermission" then
+				return `rbxassetid://1844584698`
+			end
 
-				currentMusic = Instance.new("Sound")
-				currentMusic.Parent = workspace
-				currentMusic.SoundId = `rbxassetid://{randomId}`
-				currentMusic.Volume = 1
+			return nil
+		end)
 
-				currentMusic.Ended:Connect(function()
-					currentMusic:Destroy()
-					currentMusic = nil
-				end)
+		-- runs whenever the readonly currentMusicId changes
+		subscribe(currentMusicId, function(id, _prevId)
+			if id == nil then
+				return
+			end
 
-				while not checkForPlayers() do
-					if not currentMusic or not currentMusic.IsPlaying then
-						local randomId2 = sounds[math.random(1, #sounds)]
+			if currentMusic then
+				currentMusic:Stop()
+				currentMusic = nil
+			end
 
-						currentMusic = Instance.new("Sound")
-						currentMusic.Parent = workspace
-						currentMusic.SoundId = `rbxassetid://{randomId2}`
-						currentMusic.Volume = 1
-						currentMusic:Play()
-					end
+			local sound = Instance.new("Sound")
+			sound.Name = "RoundServiceSound"
+			sound.SoundId = id
+			sound.Parent = workspace
+			sound:Play()
+			currentMusic = sound
+		end)
 
-					task.wait(1)
-				end
-
-				warn("We have enough players, starting")
-
-				for i = 1, lobbyTime do
-					local timeLeft = lobbyTime - i
-					EventHandler:broadcast("changeTimerUI", timeLeft)
-					task.wait(1)
-				end
-
+		-- ? round state logic
+		subscribe(roundState, function(s: types.RoundStates, _prev: types.RoundStates)
+			if s == "Lobby" then
+				print()
+			elseif s == "InRound" then
 				transferPlayersToRound()
-
-				local chosen = chooseGarbageMan()
-				task.wait(4)
-				warn(`${chosen} is the garbage man!`)
-				if currentMusic then
-					currentMusic:Stop()
-					currentMusic:Destroy()
-					currentMusic = nil
-				end
-				task.wait(3)
-
+				chooseGarbageMan()
 				teleportPlayers("Round")
-				state = "InRound"
-				continue
-			end
 
-			if state == "Intermission" then
-				for i = 1, intermissionTime do
-					local timeLeft = intermissionTime - i
-					-- TODO: Show stats, small intermission
-					EventHandler:broadcast("changeTimerUI", timeLeft)
-					task.wait(1)
-				end
-				state = "Lobby"
-				continue
-			end
-
-			if state == "InRound" then
-				local roundMusic = Instance.new("Sound")
-				roundMusic.Parent = workspace
-				roundMusic.SoundId = `rbxassetid://{1846458016}`
-				roundMusic.Volume = 1
-				roundMusic.Looped = true
-				roundMusic:Play()
-
-				for i = 1, roundLength do
-					local timeLeft = roundLength - i
-					EventHandler:broadcast("changeTimerUI", timeLeft)
-
-					local alivePlayers = Players:QueryDescendants(".InRound:not(.GarbageMan)") :: { Player }
-					if #alivePlayers <= 0 then
-						-- ! Might be useless
-						-- teleportPlayers("Spawn")
-						break
-					end
-
-					-- TODO: Make Ice Event
-					-- TODO: Make Avalanche Event
-					-- TODO: Make Fog Event
-					if currentEvent ~= "None" then
-						task.spawn(function()
-							eventFunctions[currentEvent]()
-						end)
-						currentEvent = "None"
-					end
-
-					task.wait(1)
-				end
-
-				if roundMusic then
-					roundMusic:Stop()
-					roundMusic:Destroy()
-				end
-
-				-- ! Round End
+				processQueue()
+			elseif s == "Intermission" then
 				teleportPlayers("Spawn")
-				local players = getPlayerInRound()
-				for _, player in ipairs(players) do
-					-- TODO: Check stats/award cash here
-					-- local plrStats = playerStats[player]
-
-					removeFromRound(player)
+				-- Remove tags
+				for _, player in Players:GetPlayers() do
+					if player:HasTag("GarbageMan") then
+						player:RemoveTag("GarbageMan")
+					end
+					player:RemoveTag("InRound")
 				end
-				table.clear(playerStats)
-
-				for _, v in ipairs(IgnoreTrashFolder:GetChildren()) do
+				-- Clear garbage
+				for _, v in IgnoreTrashFolder:GetChildren() do
 					v:Destroy()
 				end
+				-- TODO: Show stats
+			end
+		end)
 
-				local endSound = Instance.new("Sound")
-				endSound.Parent = workspace
-				endSound.SoundId = `rbxassetid://{1844584698}`
-				endSound.Volume = 1
-				endSound.Ended:Once(function()
-					endSound:Destroy()
-				end)
-				endSound:Play()
+		while true do
+			roundState("Lobby")
 
-				state = "Intermission"
-				continue
+			while not checkForPlayers() do
+				task.wait(1)
+			end
+
+			for i = lobbyTime, 0, -1 do
+				timeCounter(i)
+				task.wait(1)
+			end
+
+			roundState("InRound")
+
+			for i = roundLength, 0, -1 do
+				timeCounter(i)
+
+				-- ! Break early if all players that arent GarbageMan has died
+				local alivePlayers = Players:QueryDescendants(".InRound:not(.GarbageMan)") :: { Player }
+				if #alivePlayers <= 0 then
+					break
+				end
+
+				task.wait(1)
+			end
+
+			roundState("Intermission")
+
+			for i = intermissionTime, 0, -1 do
+				timeCounter(i)
+				task.wait(1)
 			end
 		end
 	end,
