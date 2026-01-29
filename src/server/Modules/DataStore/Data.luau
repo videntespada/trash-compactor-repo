@@ -29,10 +29,20 @@ local function playerAdded(player: Player)
 	end
 end
 
+local function grabData(player: Player): nil | Template.TemplateType
+	local profile = Profiles[player]
+	if not profile then
+		return nil
+	end
+
+	return profile.Data
+end
+
 for _, player in Players:GetPlayers() do
 	task.spawn(playerAdded, player)
 end
 
 return {
 	playerAdded = playerAdded,
+	grabData = grabData
 }

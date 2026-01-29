@@ -29,8 +29,12 @@ local function push(m: Model)
 	Debris:AddItem(bv, 0.1)
 end
 
-local function getPlayersInRound(): boolean
+local function getPlayersInRound(): { Player }
 	local list = Players:QueryDescendants(".InRound:not(.GarbageMan)") :: { Player }
+	return list
+end
+
+local function hasEnoughPlayers(list: { Player }): boolean
 	if #list < 1 then
 		return true
 	elseif #list >= 1 then
@@ -40,11 +44,37 @@ local function getPlayersInRound(): boolean
 	end
 end
 
-return function()
+return function(timeLeft: number)
+	local listOfPlayers = getPlayersInRound()
 	local trashList = TrashAssets:GetChildren() :: { Model }
-	for i = 1, 50 do
+	local alarmSound = Instance.new("Sound")
+	alarmSound.SoundId = "rbxassetid://98726045170310"
+	alarmSound.Volume = 2.5
+	alarmSound.Parent = workspace
+	alarmSound:Play()
+	alarmSound.Ended:Once(function()
+		alarmSound:Destroy()
+	end)
+
+	local rumbleSound = Instance.new("Sound")
+	rumbleSound.SoundId = "rbxassetid://140593675090528"
+	rumbleSound.Volume = 3
+	rumbleSound.Parent = workspace
+	rumbleSound:Play()
+	rumbleSound.Ended:Once(function()
+		rumbleSound:Destroy()
+	end)
+
+	for i = timeLeft, -1, 0 do
 		-- ? Check if avalanch killed all players
-		if getPlayersInRound() then
+		listOfPlayers = getPlayersInRound()
+		if hasEnoughPlayers(listOfPlayers) then
+			if rumbleSound then
+				rumbleSound:Stop()
+			end
+			if alarmSound then
+				alarmSound:Stop()
+			end
 			break
 		end
 
@@ -66,7 +96,6 @@ return function()
 			warn(`[From AvalancheEvent] {e} \n\nCleaning TrashObject for {TrashObject.model}.`)
 			TrashObject:Clean()
 		end
-
-		task.wait(0.3)
+		task.wait(1)
 	end
 end

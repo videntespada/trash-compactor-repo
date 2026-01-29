@@ -1,7 +1,9 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
+local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local Charm = require(ReplicatedStorage.Packages.Charm)
 local atom = Charm.atom
 local subscribe = Charm.subscribe
@@ -12,9 +14,7 @@ local RagdollModule = require(ReplicatedStorage.Shared.RagdollModule)
 local types = require(script.Parent.types)
 
 local roundState: Charm.Atom<types.RoundStates> = atom("None")
-local eventQueue: Charm.Atom<{ types.EventStates }> = atom({
-	"Avalanche"
-})
+local eventQueue: Charm.Atom<{ types.EventStates }> = atom({})
 local timeCounter: Charm.Atom<number> = atom(0)
 local playerCounter: Charm.Atom<number> = atom(0)
 local playerStates: Charm.Atom<{
@@ -30,18 +30,29 @@ local intermissionTime = 5
 local roundLength = 600
 local playersNeeded = 2
 
-local eventFunctions: { [string]: (...any) -> () } = {}
+local eventFunctions: { [string]: (timeLeft: number, ...any) -> () } = {}
 
 local AliveFolder = workspace:WaitForChild("Alive") :: Folder
 local IgnoreFolder = workspace:WaitForChild("Ignore") :: Folder
-local IgnoreTrashFolder = IgnoreFolder:FindFirstChild("Trash") :: Folder
 local Map = workspace:WaitForChild("Map") :: Folder
+
+local IgnoreTrashFolder = IgnoreFolder:FindFirstChild("Trash") :: Folder
 local RoundEvents = script.Parent:WaitForChild("RoundEvents") :: Folder
 local ScriptableFolder = Map:FindFirstChild("Scriptable") :: Folder
 local FirePit = ScriptableFolder:FindFirstChild("Fire") :: Part
 local ArenaSpawn = ScriptableFolder:FindFirstChild("Arena") :: Part
 local LobbySpawn = ScriptableFolder:FindFirstChild("Lobby") :: SpawnLocation
 local GarbageManSpawn = ScriptableFolder:FindFirstChild("Ramp") :: Part
+
+ServerEvents.sendRoundEvent:Connect(function(eventName: types.EventStates)
+	eventQueue(function(old): { "Avalanche" | "Fog" | "Ice" | "None" }
+		local new = table.clone(old)
+		table.insert(new, eventName)
+		return new
+	end)
+	-- TODO: UI Notification of which round the event will play
+	warn(`Added ${eventName}`)
+end)
 
 local function checkForPlayers(): boolean
 	local enoughPlayers = #Players:GetPlayers() >= playersNeeded
@@ -105,7 +116,7 @@ function removeFromRound(player: Player)
 		player:RemoveTag("GarbageMan")
 	end
 	player:RemoveTag("InRound")
-	playerStates(function(new): { [Player]: { cash: number, kills: number } }
+	playerStates(function(new)
 		new = table.clone(new)
 		new[player] = nil
 		return new
@@ -236,7 +247,8 @@ local function processQueue()
 
 			local handler = eventFunctions[nextEventName]
 			if handler then
-				handler()
+				local timeLeft = lobbyTime - timeCounter()
+				handler(timeLeft)
 			end
 
 			if roundState() ~= "InRound" then
@@ -261,7 +273,7 @@ return {
 		-- ? Load events
 		local eventList = RoundEvents:GetChildren() :: { ModuleScript }
 		for _, module in ipairs(eventList) do
-			local f = require(module) :: () -> ()
+			local f = require(module) :: (timeLeft: number) -> ()
 			eventFunctions[module.Name] = f
 		end
 
@@ -273,6 +285,12 @@ return {
 		-- ? UI change for players
 		subscribe(playerCounter, function(count, _prev)
 			EventHandler:broadcast("changePlayerCount", count)
+		end)
+
+		subscribe(eventQueue, function(state, prev)
+			if not isProcessingEvents() then
+				processQueue()
+			end
 		end)
 
 		-- ? Sound Logic
@@ -380,5 +398,6 @@ return {
 	events = {
 		"changeTimerUI",
 		"changePlayerCount",
+		"fogEventClient",
 	},
 }

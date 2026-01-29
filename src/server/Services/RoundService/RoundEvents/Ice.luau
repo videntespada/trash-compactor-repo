@@ -11,10 +11,12 @@ local iceProps = {
 	["PhysicalProperties"] = PhysicalProperties.new(0.7, 0.01, 0.5, 100, 1),
 }
 
-local function getPlayersInRound(): boolean
+local function getPlayersInRound(): { Player }
 	local list = Players:QueryDescendants(".InRound:not(.GarbageMan)") :: { Player }
+	return list
+end
 
-
+local function hasEnoughPlayers(list: { Player }): boolean
 	if #list < 1 then
 		return true
 	elseif #list >= 1 then
@@ -46,15 +48,28 @@ local function setToNormal(list: { Part })
 	end
 end
 
-return function()
+return function(timeLeft: number)
+	local listOfPlayers = getPlayersInRound()
 	local Map = workspace:WaitForChild("Map") :: Folder
 	local Scriptable = Map:FindFirstChild("Scriptable") :: Folder
 	local RampFolder = Scriptable:FindFirstChild("RampFolder") :: Folder
 	local parts = RampFolder:GetChildren()
+
+	local sound = Instance.new("Sound")
+	sound.SoundId = "rbxassetid://86063984679312"
+	sound.Volume = 3
+	sound.Parent = workspace
+	sound:Play()
+	sound.Ended:Once(function()
+		task.wait(0.5)
+		sound:Destroy()
+	end)
+
 	setToIce(parts)
 
-	for i = 1, 30 do
-		if getPlayersInRound() then
+	for i = timeLeft, -1, 0 do
+		listOfPlayers = getPlayersInRound()
+		if hasEnoughPlayers(listOfPlayers) then
 			break
 		end
 

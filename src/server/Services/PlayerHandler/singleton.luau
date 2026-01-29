@@ -2,12 +2,16 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
 
 local Data = require(ServerScriptService.Server.Modules.DataStore.Data)
+local CheckDaily = require(ServerScriptService.Server.Services.PlayerHandler.Initializers.CheckDaily)
 local AliveFolder = workspace:WaitForChild("Alive") -- Define this once up here for speed
 
 return {
 	init = function()
 		Players.PlayerAdded:Connect(function(player)
 			Data.playerAdded(player)
+
+			-- ? Check for daily rewards
+			CheckDaily(player)
 
 			-- Set initial attributes
 			player:SetAttribute("garbageChance", 0)

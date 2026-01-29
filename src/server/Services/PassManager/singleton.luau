@@ -25,7 +25,7 @@ return {
 		end)
 
 		local function process(receipt)
-			local productId = receipt.ProductId :: string
+			local productId = tostring(receipt.ProductId)
 			local playerId = receipt.PlayerId :: number
 			local player = Players:GetPlayerByUserId(playerId)
 
