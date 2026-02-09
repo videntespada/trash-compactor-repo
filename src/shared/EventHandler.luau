@@ -31,7 +31,7 @@ function m:createEvent(name: string)
 	local ev = Instance.new("RemoteEvent")
 	ev.Name = name
 	ev.Parent = script
-	print(`${ev.name} created!`)
+	-- print(`${ev.name} created!`)
 end
 
 function m:fireClient(to: Player, name: string, ...: any): string | nil

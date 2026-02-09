@@ -27,6 +27,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 				rot = scope:Value(0),
 				visible = scope:Value(false),
 			}
+
 			local state = fusionStates[screenUI.Name]
 			-- Hydrate
 			scope:Hydrate(screenUI)({
@@ -79,6 +80,13 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 				state.visible:set(false)
 			else
 				state.visible:set(true)
+			end
+
+			for key, v in pairs(fusionStates) do
+				if key == name then
+					continue
+				end
+				v.visible:set(false)
 			end
 		end
 	end)

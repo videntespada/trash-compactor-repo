@@ -24,6 +24,7 @@ local playerStates: Charm.Atom<{
 	},
 }> = atom({})
 local isProcessingEvents: Charm.Atom<boolean> = atom(false)
+local diedConnections: { [Player]: RBXScriptConnection } = {}
 
 local lobbyTime = 15
 local intermissionTime = 5
@@ -44,15 +45,12 @@ local ArenaSpawn = ScriptableFolder:FindFirstChild("Arena") :: Part
 local LobbySpawn = ScriptableFolder:FindFirstChild("Lobby") :: SpawnLocation
 local GarbageManSpawn = ScriptableFolder:FindFirstChild("Ramp") :: Part
 
-ServerEvents.sendRoundEvent:Connect(function(eventName: types.EventStates)
-	eventQueue(function(old): { "Avalanche" | "Fog" | "Ice" | "None" }
-		local new = table.clone(old)
-		table.insert(new, eventName)
-		return new
-	end)
-	-- TODO: UI Notification of which round the event will play
-	warn(`Added ${eventName}`)
-end)
+local function changePlayerCount(tag: string)
+	if tag == "InRound" then
+		local amount = #CollectionService:GetTagged(tag)
+		playerCounter(amount)
+	end
+end
 
 local function checkForPlayers(): boolean
 	local enoughPlayers = #Players:GetPlayers() >= playersNeeded
@@ -99,6 +97,43 @@ local function teleportPlayers(to: "Round" | "Spawn")
 	end
 end
 
+function addDeathConnection(player: Player)
+	local character = player.Character
+	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
+	if not humanoid then
+		warn("Couldn't find Humanoid")
+		return
+	else
+		-- print("Found Humanoid")
+	end
+
+	local conn = humanoid.Died:Connect(function()
+		-- warn(`Fired onDeathScreen for ${character.Name}`)
+		-- Remove their InRound tag immediately.
+		if player:HasTag("InRound") then
+			player:RemoveTag("InRound")
+		end
+		EventHandler:fireClient(player, "onDeathScreen", true)
+		playerCounter(playerCounter() - 1)
+		task.delay(10, function()
+			-- ? Some sort of check if they still havent bought a revive or revenge.
+			EventHandler:fireClient(player, "onDeathScreen", false)
+		end)
+	end)
+
+	repeat
+		task.wait()
+	until conn.Connected
+	-- warn(`Connected ${player.Name}`)
+
+	diedConnections[player] = conn
+end
+
+function removeDeathConnection(player: Player)
+	diedConnections[player]:Disconnect()
+	diedConnections[player] = nil
+end
+
 function addToRound(player: Player)
 	player:AddTag("InRound")
 	playerStates(function(new)
@@ -109,6 +144,8 @@ function addToRound(player: Player)
 		}
 		return new
 	end)
+	playerCounter(playerCounter() + 1)
+	addDeathConnection(player)
 end
 
 function removeFromRound(player: Player)
@@ -121,6 +158,8 @@ function removeFromRound(player: Player)
 		new[player] = nil
 		return new
 	end)
+	changePlayerCount("InRound")
+	removeDeathConnection(player)
 end
 
 local function transferPlayersToRound()
@@ -129,14 +168,6 @@ local function transferPlayersToRound()
 			continue
 		end
 		addToRound(player)
-		print(`Added ${player.Name} to round.`)
-	end
-end
-
-local function changePlayerCount(tag: string)
-	if tag == "InRound" then
-		local amount = #CollectionService:GetTagged(tag)
-		playerCounter(amount)
 	end
 end
 
@@ -261,6 +292,45 @@ local function processQueue()
 		isProcessingEvents(false)
 	end)
 end
+
+ServerEvents.sendRoundEvent:Connect(function(eventName: types.EventStates)
+	eventQueue(function(old): { "Avalanche" | "Fog" | "Ice" | "None" }
+		local new = table.clone(old)
+		table.insert(new, eventName)
+		return new
+	end)
+	-- TODO: UI Notification of which round the event will play
+	warn(`Added ${eventName}`)
+end)
+
+ServerEvents.sendRevive:Connect(function(player: Player)
+	local isRoundActive = (roundState() == "InRound")
+	local isAlreadyInRound = player:HasTag("InRound")
+
+	if isRoundActive and not isAlreadyInRound then
+		ServerEvents.canRevive:Fire(player, true)
+
+		addToRound(player)
+
+		local r = math.random
+		local function randomRel()
+			return (r() * 2) - 1
+		end
+
+		local character = player.Character
+		if character then
+			local size = ArenaSpawn.Size
+			local offset = Vector3.new((size.X / 2) * randomRel(), size.Y / 2, (size.Z / 2) * randomRel())
+			local possibleSpawn = (ArenaSpawn.CFrame * CFrame.new(offset))
+			character:PivotTo(possibleSpawn)
+		end
+	else
+		warn(
+			`[ReviveLogic] Denying revive for {player.Name}. Round Active: {isRoundActive}, In Tag: {isAlreadyInRound}`
+		)
+		ServerEvents.canRevive:Fire(player, false)
+	end
+end)
 
 return {
 	init = function()
@@ -399,5 +469,6 @@ return {
 		"changeTimerUI",
 		"changePlayerCount",
 		"fogEventClient",
+		"onDeathScreen",
 	},
 }

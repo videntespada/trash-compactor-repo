@@ -159,7 +159,8 @@ function TrashClass:StartHitbox()
 				sound:Play()
 				Debris:AddItem(sound, 5)
 
-				player:RemoveTag("InRound")
+				-- ! Transfered to a .Died Connection in RoundService
+				-- player:RemoveTag("InRound")
 			end
 
 			-- ? impact sounds

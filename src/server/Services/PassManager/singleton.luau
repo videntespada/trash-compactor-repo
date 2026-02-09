@@ -28,33 +28,49 @@ return {
 			local productId = tostring(receipt.ProductId)
 			local playerId = receipt.PlayerId :: number
 			local player = Players:GetPlayerByUserId(playerId)
+			local result = false
 
-			if not player then
-				warn("[PassManager] Could not grab player object.")
-				return Enum.ProductPurchaseDecision.NotProcessedYet
+			local function try(): boolean
+				if not player then
+					warn("[PassManager] Could not grab player object.")
+					return false
+				end
+
+				if not handlers[productId] then
+					warn("[PassManager] product Id doesnt exist.")
+					return false
+				end
+
+				local handler = handlers[productId]
+
+				local s, handlerResult = pcall(handler, player)
+
+				if not s then
+					warn(`[PassManager] CRASHED: {handlerResult}`)
+					return false
+				end
+
+				if handlerResult == nil then
+					warn(
+						`[PassManager] Vague Handler: {productId} returned nil. Did you forget to 'return true' in the module?`
+					)
+					return false
+				end
+
+				local didHandlerGrantReward = handlerResult == true
+				if not didHandlerGrantReward then
+					warn(`[PassManager] Handler did not return true.`)
+					return false
+				end
+
+				return true
 			end
 
-			if not handlers[productId] then
-				warn("[PassManager] product Id doesnt exist.")
-				return Enum.ProductPurchaseDecision.NotProcessedYet
-			end
+			result = try()
 
-			local handler = handlers[productId]
-
-			local s, handlerResult = pcall(handler)
-
-			if not s then
-				warn(`[PassManager] Handler could not run product reward for ${player}.`)
-				return Enum.ProductPurchaseDecision.NotProcessedYet
-			end
-
-			local didHandlerGrantReward = handlerResult == true
-			if not didHandlerGrantReward then
-				warn(`[PassManager] Handler did not return true.`)
-				return Enum.ProductPurchaseDecision.NotProcessedYet
-			end
-
-			return Enum.ProductPurchaseDecision.PurchaseGranted
+			return if result
+				then Enum.ProductPurchaseDecision.PurchaseGranted
+				else Enum.ProductPurchaseDecision.NotProcessedYet
 		end
 
 		MarketplaceService.ProcessReceipt = process
