@@ -15,14 +15,19 @@ return {
 
 		local required: { ModuleFunctionType } = {}
 
-		for _, v in ipairs(Handlers:GetChildren()) do
-			if v:IsA("ModuleScript") then
-				local mod = v :: ModuleScript
-
-				local reqed = require(mod) :: ModuleFunctionType
-				required[1 + #required] = reqed
+		local function collectModules(folder: Instance)
+			for _, child in ipairs(folder:GetChildren()) do
+				if child:IsA("ModuleScript") then
+					local mod = child :: ModuleScript
+					local reqed = require(mod) :: ModuleFunctionType
+					required[1 + #required] = reqed
+				elseif child:IsA("Folder") then
+					collectModules(child)
+				end
 			end
 		end
+
+		collectModules(Handlers)
 
 		for _, func in ipairs(required) do
 			func(player, scope, gui)

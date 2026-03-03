@@ -1,8 +1,8 @@
-local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local Data = require(ServerScriptService.Server.Modules.DataStore.Data)
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local Charm = require(ReplicatedStorage.Packages.Charm)
 local atom = Charm.atom
@@ -13,22 +13,19 @@ local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local RagdollModule = require(ReplicatedStorage.Shared.RagdollModule)
 local types = require(script.Parent.types)
 
-local roundState: Charm.Atom<types.RoundStates> = atom("None")
-local eventQueue: Charm.Atom<{ types.EventStates }> = atom({})
-local timeCounter: Charm.Atom<number> = atom(0)
-local playerCounter: Charm.Atom<number> = atom(0)
-local playerStates: Charm.Atom<{
-	[Player]: {
-		kills: number,
-		cash: number,
-	},
-}> = atom({})
-local isProcessingEvents: Charm.Atom<boolean> = atom(false)
+local roundState = atom("None")
+local eventQueue = atom({})
+local timeCounter = atom(0)
+local playerStates = atom({})
+local isProcessingEvents = atom(false)
+local showGarbageManPurchase = atom(false)
+local garbageMan = atom(nil)
+local nextGarbageManTable: { Player } = {}
 local diedConnections: { [Player]: RBXScriptConnection } = {}
 
 local lobbyTime = 15
 local intermissionTime = 5
-local roundLength = 600
+local roundLength = 20
 local playersNeeded = 2
 
 local eventFunctions: { [string]: (timeLeft: number, ...any) -> () } = {}
@@ -45,19 +42,12 @@ local ArenaSpawn = ScriptableFolder:FindFirstChild("Arena") :: Part
 local LobbySpawn = ScriptableFolder:FindFirstChild("Lobby") :: SpawnLocation
 local GarbageManSpawn = ScriptableFolder:FindFirstChild("Ramp") :: Part
 
-local function changePlayerCount(tag: string)
-	if tag == "InRound" then
-		local amount = #CollectionService:GetTagged(tag)
-		playerCounter(amount)
-	end
-end
-
 local function checkForPlayers(): boolean
 	local enoughPlayers = #Players:GetPlayers() >= playersNeeded
 
 	if not enoughPlayers then
 		local totalPlayers = #Players:GetPlayers()
-		warn(`Need ${playersNeeded - totalPlayers} more players to start.`)
+		-- warn(`Need ${playersNeeded - totalPlayers} more players to start.`)
 		return false
 	else
 		return true
@@ -75,7 +65,7 @@ local function teleportPlayers(to: "Round" | "Spawn")
 		local size = ArenaSpawn.Size
 		for plr, _ in pairs(t) do
 			local character = plr.Character
-			if plr:HasTag("GarbageMan") then
+			if plr == garbageMan() then
 				character:PivotTo(GarbageManSpawn.CFrame)
 				continue
 			end
@@ -103,63 +93,19 @@ function addDeathConnection(player: Player)
 	if not humanoid then
 		warn("Couldn't find Humanoid")
 		return
-	else
-		-- print("Found Humanoid")
 	end
 
 	local conn = humanoid.Died:Connect(function()
 		-- warn(`Fired onDeathScreen for ${character.Name}`)
-		-- Remove their InRound tag immediately.
-		if player:HasTag("InRound") then
-			player:RemoveTag("InRound")
-		end
-		EventHandler:fireClient(player, "onDeathScreen", true)
-		playerCounter(playerCounter() - 1)
-		task.delay(10, function()
-			-- ? Some sort of check if they still havent bought a revive or revenge.
-			EventHandler:fireClient(player, "onDeathScreen", false)
+		playerStates(function(old)
+			local new = table.clone(old)
+			new[player] = nil
+			return new
 		end)
+		EventHandler:fireClient(player, "onDeathScreen", true)
 	end)
-
-	repeat
-		task.wait()
-	until conn.Connected
-	-- warn(`Connected ${player.Name}`)
 
 	diedConnections[player] = conn
-end
-
-function removeDeathConnection(player: Player)
-	diedConnections[player]:Disconnect()
-	diedConnections[player] = nil
-end
-
-function addToRound(player: Player)
-	player:AddTag("InRound")
-	playerStates(function(new)
-		new = table.clone(new)
-		new[player] = {
-			cash = 0,
-			kills = 0,
-		}
-		return new
-	end)
-	playerCounter(playerCounter() + 1)
-	addDeathConnection(player)
-end
-
-function removeFromRound(player: Player)
-	if player:HasTag("GarbageMan") then
-		player:RemoveTag("GarbageMan")
-	end
-	player:RemoveTag("InRound")
-	playerStates(function(new)
-		new = table.clone(new)
-		new[player] = nil
-		return new
-	end)
-	changePlayerCount("InRound")
-	removeDeathConnection(player)
 end
 
 local function transferPlayersToRound()
@@ -167,39 +113,91 @@ local function transferPlayersToRound()
 		if player:HasTag("AFK") then
 			continue
 		end
-		addToRound(player)
+		playerStates(function(new)
+			new = table.clone(new)
+			new[player] = {
+				cash = 0,
+				kills = 0,
+				survivedTime = 0,
+			}
+			return new
+		end)
 	end
 end
 
 local function chooseGarbageMan()
+	--! Immediately check if someone purchased to become garbage man next round.
+	if #nextGarbageManTable > 0 then
+		local chosen = nextGarbageManTable[1]
+		table.remove(nextGarbageManTable, 1)
+
+		if chosen and chosen.Parent == Players then
+			if garbageMan() == nil then
+				garbageMan(chosen)
+			end
+
+			for i, waitingPlr in ipairs(nextGarbageManTable) do
+				warn(`{waitingPlr.Name} is still in queue (Position {i}).`)
+				-- TODO: Give notification of which round they'll be Garbage Man
+			end
+
+			return chosen
+		else
+			return chooseGarbageMan()
+		end
+	end
+
+	-- ? Choosing logic
 	local total = 0
 	local t = playerStates()
 
 	for plr, _ in pairs(t) do
-		local chance = plr:GetAttribute("garbageChance") or 0
-		total += chance
+		local baseChance = plr:GetAttribute("garbageChance") or 0
+		local multiplier = if plr:GetAttribute("IsVIP") == true then 2 else 1
+
+		total += (baseChance * multiplier)
 	end
 
+	-- Adjusted Fallback: If no one has "garbageChance" (total is 0),
+	-- we give everyone a base weight but still respect the VIP 2x multiplier.
 	if total <= 0 then
-		local players = {}
+		local weightedPlayers = {}
+		local fallbackTotal = 0
+
 		for plr, _ in pairs(t) do
-			table.insert(players, plr)
+			-- Give everyone a base weight of 1, VIPs get 2
+			local weight = if plr:GetAttribute("IsVIP") == true then 2 else 1
+			table.insert(weightedPlayers, { player = plr, weight = weight })
+			fallbackTotal += weight
 		end
-		print(players)
-		local chosen = players[math.random(#players)]
-		chosen:AddTag("GarbageMan")
-		return chosen
+
+		if fallbackTotal == 0 then
+			return nil
+		end -- Server is empty
+
+		local randomPoint = math.random() * fallbackTotal
+		local currentCount = 0
+
+		for _, entry in ipairs(weightedPlayers) do
+			currentCount += entry.weight
+			if currentCount >= randomPoint then
+				garbageMan(entry.player)
+				return entry.player
+			end
+		end
 	end
 
 	local randomPoint = math.random() * total
 	local currentCount = 0
 
 	for plr, _ in pairs(t) do
-		local chance = plr:GetAttribute("garbageChance") or 0
-		currentCount += chance
+		local baseChance = plr:GetAttribute("garbageChance") or 0
+		local multiplier = if plr:GetAttribute("IsVIP") == true then 2 else 1
+
+		currentCount += (baseChance * multiplier)
 
 		if currentCount >= randomPoint then
-			plr:AddTag("GarbageMan")
+			garbageMan(plr)
 			return plr
 		end
 	end
@@ -208,47 +206,36 @@ local function chooseGarbageMan()
 end
 
 local function onTouch(hitPart: BasePart)
-	if not hitPart.Parent then
-		return
-	end
-	-- warn(`[FirePit] Touched by: {hitPart.Name} (Parent: {hitPart.Parent.Name})`)
-
-	-- ? Character validation
 	local characterModel = hitPart.Parent
 	if not characterModel or not characterModel:IsA("Model") then
-		return
-	end
-
-	if characterModel.Parent ~= AliveFolder then
-		-- warn(`[FirePit] Ignored {characterModel.Name}: Not in Alive folder (Currently in: {characterModel.Parent})`)
+		warn("No character.")
 		return
 	end
 
 	local player = Players:GetPlayerFromCharacter(characterModel)
-	if not player then
-		-- warn(`[FirePit] ${characterModel.Name} does not have a player`)
-		return
-	end
-
-	if not player:HasTag("InRound") then
-		-- warn(`[FirePit] HIT {player.Name} but they have NO 'InRound' tag!`)
-		return
-	end
-
 	local humanoid = characterModel:FindFirstChildOfClass("Humanoid")
-	if not humanoid or humanoid.Health <= 0 then
+
+	if not player or not humanoid or humanoid.Health <= 0 then
+		warn("No player, or humanoid is dead/nil")
+		return
+	end
+	if not playerStates()[player] then
+		warn("Player isn't in round.")
 		return
 	end
 
-	-- warn(`[FirePit] KILLING {player.Name}! They were valid and InRound.`)
+	humanoid.Health = 0
 
-	RagdollModule.Ragdoll(characterModel)
-
-	-- ? Get total amount to remove, and kill
-	humanoid:TakeDamage(humanoid.MaxHealth)
-
-	-- ? remove from round
-	removeFromRound(player)
+	task.defer(function()
+		if playerStates()[player] then
+			RagdollModule.Ragdoll(characterModel)
+			playerStates(function(old)
+				local new = table.clone(old)
+				new[player] = nil
+				return new
+			end)
+		end
+	end)
 end
 
 local function processQueue()
@@ -293,6 +280,64 @@ local function processQueue()
 	end)
 end
 
+local function awardRewards()
+	local finalStates = playerStates()
+	local gm: Player = garbageMan()
+	local survivorsLeft = 0
+	local COINS_PER_SECOND = 0.5
+	local COINS_PER_KILL = 1.3
+	local WIN_BONUS_COINS = 10
+
+	-- Count remaining survivors
+	for plr, stats in pairs(finalStates) do
+		if plr ~= gm then
+			survivorsLeft += 1
+		end
+	end
+
+	local survivorsWon = survivorsLeft > 0
+	local gmWon = survivorsLeft == 0
+
+	--  Handle Survivor Rewards
+	for plr, stats in pairs(finalStates) do
+		if plr ~= gm then
+			local plrData = Data.grabData(plr)
+			-- Participating Coins (Based on survival time/participation)
+			local timeSurvived = stats.survivedTime
+			local coinsEarned = math.floor(timeSurvived * COINS_PER_SECOND)
+			local crownsEarned = 0
+
+			if survivorsWon then
+				--  Add Win Bonus & Trophy
+				coinsEarned += WIN_BONUS_COINS
+				plrData.crowns += 1
+			end
+			Data.mutateCurrency(plr, "coins", plrData.coins + coinsEarned)
+			Data.mutateCurrency(plr, "crowns", plrData.crowns + crownsEarned)
+		end
+	end
+
+	-- Handle Garbage Man Rewards
+	if gm then
+		-- Participation Coins
+		local coinsRewarded = 25
+		local crownsEarned = 0
+		local gmData = Data.grabData(gm)
+		local gmState = playerStates()[gm]
+
+		if gmWon then
+			-- Trophy for eliminating everyone
+			crownsEarned += 1
+
+			-- Reward per death
+			coinsRewarded += math.floor(gmState.kills * COINS_PER_KILL)
+		end
+
+		Data.mutateCurrency(gm, "coins", gmData.coins + coinsRewarded)
+		Data.mutateCurrency(gm, "crowns", gmData.crowns + crownsEarned)
+	end
+end
+
 ServerEvents.sendRoundEvent:Connect(function(eventName: types.EventStates)
 	eventQueue(function(old): { "Avalanche" | "Fog" | "Ice" | "None" }
 		local new = table.clone(old)
@@ -305,12 +350,22 @@ end)
 
 ServerEvents.sendRevive:Connect(function(player: Player)
 	local isRoundActive = (roundState() == "InRound")
-	local isAlreadyInRound = player:HasTag("InRound")
+	local isAlreadyInRound = playerStates()[player]
 
 	if isRoundActive and not isAlreadyInRound then
 		ServerEvents.canRevive:Fire(player, true)
 
-		addToRound(player)
+		player:LoadCharacterAsync()
+
+		playerStates(function(new)
+			new = table.clone(new)
+			new[player] = {
+				cash = 0,
+				kills = 0,
+				survivedTime = 0,
+			}
+			return new
+		end)
 
 		local r = math.random
 		local function randomRel()
@@ -332,10 +387,38 @@ ServerEvents.sendRevive:Connect(function(player: Player)
 	end
 end)
 
+ServerEvents.forceChooseGarbageMan:Connect(function(player: Player)
+	-- Prevent duplicates in the queue
+	if table.find(nextGarbageManTable, player) then
+		warn(`{player.Name} is already in the Garbage Man queue.`)
+		return
+	end
+
+	table.insert(nextGarbageManTable, player)
+	showGarbageManPurchase(false)
+
+	-- If they aren't the only one in the queue, warn them they are waiting
+	if #nextGarbageManTable > 1 then
+		warn(`{player.Name} bought Garbage Man, but there is a queue. They are position {#nextGarbageManTable}.`)
+		-- TODO: Send a UI notification
+	end
+end)
+
+ServerEvents.onGarbageManKill:Connect(function(who: Player)
+	playerStates(function(old)
+		local new = table.clone(old)
+		if new[who] then
+			new[who].kills += 1
+		end
+		return new
+	end)
+end)
+
 return {
 	init = function()
-		local _onRemoved = CollectionService.TagRemoved:Connect(changePlayerCount)
-		local _onAdd = CollectionService.TagAdded:Connect(changePlayerCount)
+		EventHandler:connect("requestRevive", function(player: Player)
+			player:LoadCharacterAsync()
+		end)
 
 		-- ? Setup fire pit
 		FirePit.Touched:Connect(onTouch)
@@ -352,14 +435,66 @@ return {
 			EventHandler:broadcast("changeTimerUI", count)
 		end)
 
-		-- ? UI change for players
-		subscribe(playerCounter, function(count, _prev)
-			EventHandler:broadcast("changePlayerCount", count)
+		-- ? Dynamics for playerState change
+		subscribe(playerStates, function(state, prev)
+			-- ? Check for players that were removed
+			-- Inside: subscribe(playerStates, function(state, prev) ...
+			for plr, _ in prev do
+				if not state[plr] then
+					plr:RemoveTag("InRound")
+
+					-- If the person who died/left was the Garbage Man, clear the atom
+					if garbageMan() == plr then
+						garbageMan(nil)
+					end
+
+					if diedConnections[plr] then
+						diedConnections[plr]:Disconnect()
+						diedConnections[plr] = nil
+					end
+				end
+			end
+
+			-- ? Check for players that were added
+			for plr, _ in state do
+				if not prev[plr] then
+					-- This was the player who was added
+					if plr and plr.Parent == Players then
+						plr:AddTag("InRound")
+					end
+					addDeathConnection(plr)
+				end
+			end
 		end)
 
+		-- ? Change in count of normal players in round
+		local nonGarbageManCount = computed(function()
+			local states = playerStates()
+			local count = 0
+			for plr, _ in states do
+				if not plr:HasTag("GarbageMan") then
+					count += 1
+				end
+			end
+			return count
+		end)
+
+		-- ? UI Response for ^
+		subscribe(nonGarbageManCount, function(state, prev)
+			EventHandler:broadcast("changePlayerCount", state)
+		end)
+
+		-- ? Processing events, whenever eventQueue has changed
 		subscribe(eventQueue, function(state, prev)
 			if not isProcessingEvents() then
 				processQueue()
+			end
+		end)
+
+		-- ? Showing buying garbage man button
+		subscribe(showGarbageManPurchase, function(state, prev)
+			for _, plr in ipairs(Players:GetChildren()) do
+				EventHandler:fireClient(plr, "becomeGarbageManToggle", state)
 			end
 		end)
 
@@ -393,6 +528,7 @@ return {
 
 			if currentMusic then
 				currentMusic:Stop()
+				currentMusic:Destroy()
 				currentMusic = nil
 			end
 
@@ -400,8 +536,29 @@ return {
 			sound.Name = "RoundServiceSound"
 			sound.SoundId = id
 			sound.Parent = workspace
+			sound.Volume = 0.3
 			sound:Play()
 			currentMusic = sound
+		end)
+
+		-- ? garbage man subscriber
+		subscribe(garbageMan, function(newMan: Player?, oldMan: Player?)
+			-- 1. Remove from the previous guy
+			if oldMan then
+				oldMan:RemoveTag("GarbageMan")
+			end
+
+			-- 2. Add to the new guy
+			if newMan then
+				-- Optional: Double check to remove from others just in case of state desync
+				for _, plr in Players:GetPlayers() do
+					if plr ~= newMan and plr:HasTag("GarbageMan") then
+						plr:RemoveTag("GarbageMan")
+					end
+				end
+
+				newMan:AddTag("GarbageMan")
+			end
 		end)
 
 		-- ? round state logic
@@ -409,24 +566,23 @@ return {
 			if s == "Lobby" then
 				print()
 			elseif s == "InRound" then
+				showGarbageManPurchase(false)
 				transferPlayersToRound()
 				chooseGarbageMan()
 				teleportPlayers("Round")
 
 				processQueue()
 			elseif s == "Intermission" then
+				awardRewards()
 				teleportPlayers("Spawn")
-				-- Remove tags
-				for _, player in Players:GetPlayers() do
-					if player:HasTag("GarbageMan") then
-						player:RemoveTag("GarbageMan")
-					end
-					player:RemoveTag("InRound")
-				end
+				playerStates({})
+				garbageMan(nil)
 				-- Clear garbage
 				for _, v in IgnoreTrashFolder:GetChildren() do
 					v:Destroy()
 				end
+				-- Prompt show become garbageman pass
+				showGarbageManPurchase(true)
 				-- TODO: Show stats
 			end
 		end)
@@ -448,9 +604,12 @@ return {
 			for i = roundLength, 0, -1 do
 				timeCounter(i)
 
-				-- ! Break early if all players that arent GarbageMan has died
-				local alivePlayers = Players:QueryDescendants(".InRound:not(.GarbageMan)") :: { Player }
-				if #alivePlayers <= 0 then
+				for plr, stat in pairs(playerStates()) do
+					stat.survivedTime += 1
+				end
+
+				-- ! Break early if there are no more normal players, or no garbage man
+				if nonGarbageManCount() == 0 or garbageMan() == nil then
 					break
 				end
 
@@ -470,5 +629,7 @@ return {
 		"changePlayerCount",
 		"fogEventClient",
 		"onDeathScreen",
+		"requestRevive",
+		"becomeGarbageManToggle",
 	},
 }

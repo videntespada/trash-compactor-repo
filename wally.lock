@@ -10,7 +10,7 @@ dependencies = []
 [[package]]
 name = "ayomo/trashcompactor"
 version = "0.1.0"
-dependencies = [["Charm", "littensy/charm@0.10.0"], ["Cmdr", "evaera/cmdr@1.12.0"], ["Janitor", "howmanysmall/janitor@1.18.3"], ["ProfileService", "brittonfischer/profileservice@2.1.5"], ["TopbarPlus", "1foreverhd/topbarplus@3.4.0"]]
+dependencies = [["Charm", "littensy/charm@0.10.0"], ["Cmdr", "evaera/cmdr@1.12.0"], ["Janitor", "howmanysmall/janitor@1.18.3"], ["ProfileService", "brittonfischer/profileservice@2.1.5"], ["TopbarPlus", "1foreverhd/topbarplus@3.4.0"], ["topbarplus", "1foreverhd/topbarplus@3.4.0"]]
 
 [[package]]
 name = "brittonfischer/profileservice"

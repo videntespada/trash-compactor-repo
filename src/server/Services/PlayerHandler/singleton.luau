@@ -1,17 +1,45 @@
 local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local Data = require(ServerScriptService.Server.Modules.DataStore.Data)
 local CheckDaily = require(ServerScriptService.Server.Services.PlayerHandler.Initializers.CheckDaily)
-local AliveFolder = workspace:WaitForChild("Alive") -- Define this once up here for speed
+local CheckFreeRewards = require(ServerScriptService.Server.Services.PlayerHandler.Initializers.CheckFreeRewards)
+local AliveFolder = workspace:WaitForChild("Alive")
 
 return {
 	init = function()
 		Players.PlayerAdded:Connect(function(player)
 			Data.playerAdded(player)
 
+			local plrData = Data.grabData(player)
+
+			task.delay(5, function()
+				EventHandler:fireClient(player, "changeCurrency", "crowns", plrData.crowns)
+				EventHandler:fireClient(player, "changeCurrency", "coins", plrData.coins)
+				-- Load Abilities to abilityframe
+				EventHandler:fireClient(player, "loadAbilitiyInventoryData", plrData.abilityInventory, plrData.ability)
+			end)
+
 			-- ? Check for daily rewards
 			CheckDaily(player)
+
+			-- ? Check for free rewards
+			if not plrData.claimedReward then
+				CheckFreeRewards(player)
+			else
+				-- Force the UI to say that they did everything already
+				EventHandler:fireClient(player, "freeRewardStatus", {
+					gameFavorited = true,
+					groupJoined = true,
+					gameLiked = true,
+				})
+			end
+
+			if plrData.passes.vip then
+				player:SetAttribute("IsVIP", true)
+			end
 
 			-- Set initial attributes
 			player:SetAttribute("garbageChance", 0)
@@ -21,6 +49,8 @@ return {
 
 				if character.Parent then -- Ensure they haven't been deleted instantly
 					character.Parent = AliveFolder
+
+					-- ? Spawn effect
 				end
 			end)
 		end)
@@ -29,5 +59,14 @@ return {
 			-- Data.playerRemoving(player)
 		end)
 	end,
-	events = {},
+	events = {
+		"changeCurrency",
+		"freeRewardStatus",
+		"checkRewardStatus",
+		"promptFavorite",
+		"toggleFavorited",
+		"promptJoinGroup",
+		"toggleJoinedGroup",
+		"loadAbilitiyInventoryData",
+	},
 }

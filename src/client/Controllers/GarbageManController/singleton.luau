@@ -20,7 +20,6 @@ return {
 		local connection: RBXScriptConnection? = nil
 		local throwConnection: RBXScriptConnection? = nil
 
-		-- HELPER: Always get the LIVE InputActions
 		local function getThrowAction()
 			local gui = player:WaitForChild("PlayerGui")
 			-- Increased timeout to 10 just to be safe on slow loads

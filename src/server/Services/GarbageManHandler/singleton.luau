@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local TrashClass = require(ServerScriptService.Server.Classes.TrashClass)
+local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 return {
 	init = function()
@@ -13,6 +14,13 @@ return {
 		local Assets = ReplicatedStorage:WaitForChild("Assets")
 		local TrashAssets = Assets:FindFirstChild("Trash") :: Folder
 		local toThrow: Model
+
+		local modelToClass: {
+			{
+				model: Model,
+				class: TrashClass.TrashClass,
+			}
+		} = {}
 
 		local function chooseNewTrash(): Model
 			local t = TrashAssets:GetChildren() :: { Model }
@@ -52,10 +60,22 @@ return {
 			Debris:AddItem(bv, 0.1)
 
 			-- Attach TrashClass for behavior
-			local trashClass = TrashClass.new(toThrow, true)
+			local trashClass = TrashClass.new(player, toThrow, false)
+			Debris:AddItem(toThrow, 10)
+
 			trashClass:CreateBounding()
 			trashClass:StartHitbox()
-			Debris:AddItem(toThrow, 5)
+
+			local iter = #modelToClass + 1
+			modelToClass[iter] = {
+				model = toThrow,
+				class = trashClass,
+			}
+			toThrow.AncestryChanged:Once(function(parent)
+				if parent == nil then
+					modelToClass[iter].class:Clean()
+				end
+			end)
 
 			-- Throwing Sound
 			local sound = Instance.new("Sound")
@@ -73,13 +93,29 @@ return {
 			EventHandler:fireClient(player, "changeTrash", chosen.Name)
 		end)
 
+		-- ? Bomb breaking trash
+		ServerEvents.bombBreakTrash:Connect(function(model: Model)
+			for i = 1, #modelToClass do
+				if modelToClass[i].model == model then
+					local foundModel = modelToClass[i].model
+					for _, v in ipairs(foundModel:GetDescendants()) do
+						if v:IsA("WeldContraint") or v:IsA("Weld") then
+							v:Destroy()
+						end
+						if v:IsA("Part") or v:IsA("MeshPart") then
+							v.CanCollide = false
+						end
+					end
+				end
+			end
+		end)
+
 		-- ? Enabling/Disaibling mechanics.
 		CollectionService:GetInstanceAddedSignal("GarbageMan"):Connect(function(a)
 			if a:IsA("Player") then
 				local player = a
 
 				-- ! Enable
-				task.wait(6)
 				-- Choose first trash
 				toThrow = chooseNewTrash()
 				EventHandler:fireClient(player, "changeTrash", toThrow.Name)

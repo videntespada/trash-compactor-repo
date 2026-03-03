@@ -1,7 +1,10 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local ServerScriptService = game:GetService("ServerScriptService")
+
+local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 
 return {
@@ -17,6 +20,7 @@ return {
 			-- Only listen if the event is for OUR player
 			if revivePlayer == player then
 				canRevive = reviveStatus
+				EventHandler:fireClient(player, "onDeathScreen", false)
 			end
 		end)
 

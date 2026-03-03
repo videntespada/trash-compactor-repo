@@ -1,5 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
 
+local ClientEvents = require(StarterPlayer.StarterPlayerScripts.Client.ClientEvents)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local Fusion = require(ReplicatedStorage.Shared.Fusion)
 local peek = Fusion.peek
@@ -34,8 +36,11 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 		end),
 	})
 
-	EventHandler:connectClient("onDeathScreen", function(toggle: boolean)
+	local function toggleIsVisible(toggle: boolean)
 		warn(`Set to ${toggle}`)
 		state.isVisible:set(toggle)
-	end)
+	end
+
+	EventHandler:connectClient("onDeathScreen", toggleIsVisible)
+	ClientEvents.onDeathScreenToggle:Connect(toggleIsVisible)
 end

@@ -5,13 +5,13 @@ local TweenService = game:GetService("TweenService")
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 return {
 	init = function()
+		local atmosphere = Lighting:FindFirstChild("Atmosphere") :: Atmosphere
+		local originalEnd = Lighting.FogEnd
+		local originalStart = Lighting.FogStart
+		local originalColor = Lighting.FogColor
+		local originalOutdoorAmbient = Lighting.OutdoorAmbient
+
 		EventHandler:connectClient("fogEventClient", function(toggle: boolean)
-			local atmosphere = Lighting:FindFirstChild("Atmosphere") :: Atmosphere
-			local originalEnd = Lighting.FogEnd
-			local originalStart = Lighting.FogStart
-			local originalColor = Lighting.FogColor
-			local originalOutdoorAmbient = Lighting.OutdoorAmbient
-			
 			if toggle then
 				atmosphere.Parent = workspace
 

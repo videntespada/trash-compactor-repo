@@ -7,13 +7,20 @@ local OnEvent = require(ReplicatedStorage.Shared.Fusion.Instances.OnEvent)
 
 return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: PlayerGui)
 	local baseUI = gui:WaitForChild("ScreenGui") :: ScreenGui
-	local HUD = baseUI:FindFirstChild("HUD") :: Frame
 	local UIFolder = script:FindFirstAncestor("UI") :: Folder
 	local ButtonEvents = UIFolder:FindFirstChild("ButtonEvents") :: Folder
 	local toActivate: { [string]: (player: Player, from: GuiButton, ...any) -> () } = {}
 
 	local function onActivate(name: string, button: GuiButton)
 		toActivate[name](player, button)
+
+		local sound = Instance.new("Sound")
+		sound.SoundId = "rbxassetid://88442833509532"
+		sound.Parent = workspace
+		sound.Ended:Once(function()
+			sound:Destroy()
+		end)
+		sound:Play()
 	end
 
 	local function getDeviceType(): string
@@ -52,7 +59,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 		toActivate[v.Name] = func
 	end
 
-	print(toActivate)
+	-- print(toActivate)
 
 	-- ! Rotation breaks background!!!
 	for _, v in ipairs(baseUI:GetDescendants()) do
@@ -92,6 +99,13 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 					-- Mouse Functionality
 					[OnEvent("MouseEnter")] = function()
 						state.size:set(UDim2.fromScale(state.baseSize.X.Scale * 1.1, state.baseSize.Y.Scale * 1.1))
+						local sound = Instance.new("Sound")
+						sound.SoundId = "rbxassetid://139800881181209"
+						sound.Parent = workspace
+						sound.Ended:Once(function()
+							sound:Destroy()
+						end)
+						sound:Play()
 						-- state.rot:set(math.random(-5, 5))
 					end,
 
@@ -119,7 +133,6 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 						end)
 
 						-- Find event to fire
-						print(button:GetTags()[1])
 						onActivate(button:GetTags()[1], button)
 					end,
 				})
@@ -150,6 +163,13 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 					-- Mouse Functionality
 					[OnEvent("MouseEnter")] = function()
 						state.size:set(UDim2.fromScale(state.baseSize.X.Scale * 1.1, state.baseSize.Y.Scale * 1.1))
+						local sound = Instance.new("Sound")
+						sound.SoundId = "rbxassetid://139800881181209"
+						sound.Parent = workspace
+						sound.Ended:Once(function()
+							sound:Destroy()
+						end)
+						sound:Play()
 						-- state.rot:set(math.random(-5, 5))
 					end,
 
@@ -175,8 +195,8 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 						task.delay(0.1, function()
 							state.size:set(state.baseSize)
 						end)
+
 						-- Find event to fire
-						print(button:GetTags()[1])
 						onActivate(button:GetTags()[1], button)
 					end,
 				})
