@@ -27,7 +27,7 @@ end
 return {
 	init = function()
 		local AbilityFolder = script.Parent:WaitForChild("Abilities") :: Folder
-		print(AbilityFolder:GetChildren())
+		-- print(AbilityFolder:GetChildren())
 		local AssetFolder = ReplicatedStorage:WaitForChild("Assets"):FindFirstChild("AbilityAssets") :: Folder
 
 		for _, mod in ipairs(AbilityFolder:GetChildren() :: { ModuleScript }) do
@@ -84,15 +84,26 @@ return {
 
 		EventHandler:connect("equipAbility", function(player: Player, ability: string)
 			local dta = safeGrabData(player)
-			if not dta then
-				return
-			end
+			if not dta then return end
 
 			local equippedAbility = dta.ability
 			local newAbility = ability
 
-			dta.abilityInventory[#dta.abilityInventory + 1] = equippedAbility
-			dta.abilityInventory[table.find(dta.abilityInventory, newAbility)] = nil
+			if newAbility == equippedAbility then return end
+
+			local idx = table.find(dta.abilityInventory, newAbility)
+			if not idx then
+				warn(`${player.Name} does not own ability ${newAbility}`)
+				return
+			end
+
+			if equippedAbility ~= "" then
+				table.insert(dta.abilityInventory, equippedAbility)
+			end
+			local removeIdx = table.find(dta.abilityInventory, newAbility)
+			if removeIdx then
+				table.remove(dta.abilityInventory, removeIdx)
+			end
 			dta.ability = newAbility
 
 			EventHandler:fireClient(player, "loadAbilitiyInventoryData", dta.abilityInventory, dta.ability, dta.crowns)
@@ -100,24 +111,22 @@ return {
 
 		EventHandler:connect("buyAbility", function(player: Player, ability: string)
 			local dta = safeGrabData(player)
+			if not dta then return end
 
-			if not dta then
-				return
-			end
-
-			if dta.abilityInventory[#dta.abilityInventory] == ability then
-				warn(`${player} already has ${ability} equipped`)
+			local alreadyOwned = (table.find(dta.abilityInventory, ability) ~= nil) or (dta.ability == ability)
+			if alreadyOwned then
+				warn(`${player.Name} already has ${ability}`)
 				return
 			end
 
 			local cost = SharedState.abilityCost[ability]
-			if dta.coins < cost then
-				warn(`${player} does not have enough coins to buy ${ability}`)
+			if not cost or dta.coins < cost then
+				warn(`${player.Name} does not have enough coins to buy ${ability}`)
 				return
 			end
 
 			Data.mutateCurrency(player, "coins", dta.coins - cost)
-			dta.abilityInventory[#dta.abilityInventory + 1] = ability
+			table.insert(dta.abilityInventory, ability)
 			EventHandler:fireClient(player, "loadAbilitiyInventoryData", dta.abilityInventory, dta.ability, dta.crowns)
 		end)
 

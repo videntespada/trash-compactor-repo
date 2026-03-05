@@ -96,13 +96,19 @@ function addDeathConnection(player: Player)
 	end
 
 	local conn = humanoid.Died:Connect(function()
-		-- warn(`Fired onDeathScreen for ${character.Name}`)
 		playerStates(function(old)
 			local new = table.clone(old)
 			new[player] = nil
 			return new
 		end)
-		EventHandler:fireClient(player, "onDeathScreen", true)
+		local states = playerStates()
+		local gm = garbageMan()
+		local survivorsLeft = 0
+		for plr, _ in pairs(states) do
+			if plr ~= gm then survivorsLeft += 1 end
+		end
+		local showBottomButtons = survivorsLeft > 0
+		EventHandler:fireClient(player, "onDeathScreen", true, showBottomButtons)
 	end)
 
 	diedConnections[player] = conn
@@ -225,6 +231,15 @@ local function onTouch(hitPart: BasePart)
 	end
 
 	humanoid.Health = 0
+
+	local states = playerStates()
+	local gm = garbageMan()
+	local survivorsExcludingThis = 0
+	for plr, _ in pairs(states) do
+		if plr ~= gm and plr ~= player then survivorsExcludingThis += 1 end
+	end
+	local showBottomButtons = survivorsExcludingThis > 0
+	EventHandler:fireClient(player, "onDeathScreen", true, showBottomButtons)
 
 	task.defer(function()
 		if playerStates()[player] then
