@@ -53,10 +53,12 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 		end
 	end
 
-	for _, v in ipairs(ButtonEvents:GetChildren() :: { ModuleScript }) do
-		local func = require(v) :: () -> ()
+	for _, v in ipairs(ButtonEvents:GetDescendants() :: { ModuleScript }) do
+		if v:IsA("ModuleScript") then
+			local func = require(v) :: () -> ()
 
-		toActivate[v.Name] = func
+			toActivate[v.Name] = func
+		end
 	end
 
 	-- print(toActivate)
@@ -126,6 +128,9 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 
 					-- General Activated Bounce
 					[OnEvent("Activated")] = function()
+						if button:HasTag("ignore") then
+							return
+						end
 						state.size:set(UDim2.fromScale(state.baseSize.X.Scale * 0.9, state.baseSize.Y.Scale * 0.9))
 						-- state.rot:set(0)
 						task.delay(0.1, function()
@@ -190,6 +195,9 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 
 					-- General Activated Bounce
 					[OnEvent("Activated")] = function()
+						if button:HasTag("ignore") then
+							return
+						end
 						state.size:set(UDim2.fromScale(state.baseSize.X.Scale * 0.9, state.baseSize.Y.Scale * 0.9))
 						-- state.rot:set(0)
 						task.delay(0.1, function()

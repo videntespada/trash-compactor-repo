@@ -1,5 +1,5 @@
 local Debris = game:GetService("Debris")
-local Players = game:GetService("Players")
+local _Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -10,6 +10,7 @@ local types = require(script.Parent.types)
 local Data = require(ServerScriptService.Server.Modules.DataStore.Data)
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
+local SharedState = require(ReplicatedStorage.Shared.SharedState)
 
 local abilityList: { [string]: types.AbilityMod } = {}
 local playerStates = atom({})
@@ -34,6 +35,7 @@ return {
 			abilityList[mod.Name] = req
 		end
 
+		-- General ability events
 		EventHandler:connect("sendAbilityUse", function(player: Player)
 			local dta = safeGrabData(player)
 			if dta == nil then
@@ -78,6 +80,55 @@ return {
 				}
 				return new
 			end)
+		end)
+
+		EventHandler:connect("equipAbility", function(player: Player, ability: string)
+			local dta = safeGrabData(player)
+			if not dta then
+				return
+			end
+
+			local equippedAbility = dta.ability
+			local newAbility = ability
+
+			dta.abilityInventory[#dta.abilityInventory + 1] = equippedAbility
+			dta.abilityInventory[table.find(dta.abilityInventory, newAbility)] = nil
+			dta.ability = newAbility
+
+			EventHandler:fireClient(player, "loadAbilitiyInventoryData", dta.abilityInventory, dta.ability, dta.crowns)
+		end)
+
+		EventHandler:connect("buyAbility", function(player: Player, ability: string)
+			local dta = safeGrabData(player)
+
+			if not dta then
+				return
+			end
+
+			if dta.abilityInventory[#dta.abilityInventory] == ability then
+				warn(`${player} already has ${ability} equipped`)
+				return
+			end
+
+			local cost = SharedState.abilityCost[ability]
+			if dta.coins < cost then
+				warn(`${player} does not have enough coins to buy ${ability}`)
+				return
+			end
+
+			Data.mutateCurrency(player, "coins", dta.coins - cost)
+			dta.abilityInventory[#dta.abilityInventory + 1] = ability
+			EventHandler:fireClient(player, "loadAbilitiyInventoryData", dta.abilityInventory, dta.ability, dta.crowns)
+		end)
+
+		-- Client -> Server: Abilities UI requesting latest inventory/equipped data
+		EventHandler:connect("requestAbilityInventory", function(player: Player)
+			local dta = safeGrabData(player)
+			if not dta then
+				return
+			end
+
+			EventHandler:fireClient(player, "loadAbilitiyInventoryData", dta.abilityInventory, dta.ability, dta.crowns)
 		end)
 
 		-- ? Bespoke events
@@ -172,7 +223,10 @@ return {
 	end,
 	events = {
 		"sendAbilityUse",
+		"equipAbility",
+		"buyAbility",
 		"bombVFX",
 		"onBombFinish",
+		"requestAbilityInventory",
 	},
 }
