@@ -9,6 +9,7 @@ export type TemplateType = {
 	todayClaimed: boolean,
 	passes: {
 		["2x_coins"]: boolean,
+		["2x_garbage_man"]: boolean,
 		vip: boolean,
 		passAbility: boolean,
 	},
@@ -25,5 +26,6 @@ return {
 		passAbility = false,
 		vip = false,
 		["2x_coins"] = false,
+		["2x_garbage_man"] = false,
 	},
 } :: TemplateType

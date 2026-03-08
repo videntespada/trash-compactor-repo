@@ -118,12 +118,18 @@ return {
 
 			local alreadyOwned = (table.find(dta.abilityInventory, ability) ~= nil) or (dta.ability == ability)
 			if alreadyOwned then
+				EventHandler:fireClient(player, "sendNotification", "You already own this ability.")
 				warn(`${player.Name} already has ${ability}`)
 				return
 			end
 
 			local cost = SharedState.abilityCost[ability]
-			if not cost or dta.coins < cost then
+			if not cost then
+				EventHandler:fireClient(player, "sendNotification", "This ability is not available.")
+				return
+			end
+			if dta.coins < cost then
+				EventHandler:fireClient(player, "sendNotification", `Not enough coins to buy this ability. You need ${cost} coins.`)
 				warn(`${player.Name} does not have enough coins to buy ${ability}`)
 				return
 			end

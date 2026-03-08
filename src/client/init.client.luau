@@ -1,8 +1,25 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
 
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
+
+-- Disable character reset: CoreScripts may register ResetButtonCallback after we run, so retry.
+local function disableReset()
+	local ok = pcall(function()
+		StarterGui:SetCore("ResetButtonCallback", false)
+	end)
+	return ok
+end
+task.spawn(function()
+	for _ = 1, 30 do
+		if disableReset() then
+			break
+		end
+		task.wait(0.2)
+	end
+end)
 
 local player = Players.LocalPlayer
 local PlayerScripts = player.PlayerScripts

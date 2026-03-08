@@ -5,4 +5,5 @@ return {
 	toggleUI = LemonSignal.new(),
 	onDeathScreenToggle = LemonSignal.new(),
 	sendNotification = LemonSignal.new(),
+	skipLoadingScreen = LemonSignal.new(),
 }

@@ -1,5 +1,9 @@
 local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
+
+
+local ClientEvents = require(StarterPlayer.StarterPlayerScripts.Client.ClientEvents)
 local Fusion = require(ReplicatedStorage.Shared.Fusion)
 local Spring = require(ReplicatedStorage.Shared.Fusion.Animation.Spring)
 local scopePool = require(ReplicatedStorage.Shared.Fusion.Memory.scopePool)
@@ -17,6 +21,10 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 		loaded = scope:Value(0),
 		toLoad = {},
 	}
+
+	ClientEvents.skipLoadingScreen:Connect(function(...) 
+		states.visible:set(false)
+	end)
 
 	for _, item in ipairs(workspace:GetDescendants()) do
 		if item:IsA("MeshPart") or item:IsA("Decal") then

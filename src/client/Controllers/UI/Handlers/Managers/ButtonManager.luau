@@ -12,7 +12,12 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	local toActivate: { [string]: (player: Player, from: GuiButton, ...any) -> () } = {}
 
 	local function onActivate(name: string, button: GuiButton)
-		toActivate[name](player, button)
+		local handler = toActivate[name]
+		if not handler then
+			warn("[ButtonManager] No handler for button tag:", name)
+			return
+		end
+		handler(player, button)
 
 		local sound = Instance.new("Sound")
 		sound.SoundId = "rbxassetid://88442833509532"

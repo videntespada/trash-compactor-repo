@@ -5,7 +5,7 @@ local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local ProfileStore = require(script.Parent.ProfileStore)
 local Template = require(script.Parent.Template)
 
-local PlayerStore = ProfileStore.New("_*99288f7^%237.021", Template)
+local PlayerStore = ProfileStore.New("_*99288f7^%237.022", Template)
 local Profiles: { [Player]: typeof(PlayerStore:StartSessionAsync()) } = {}
 
 local function updateLeaderstats(player: Player, coins: number, crowns: number)

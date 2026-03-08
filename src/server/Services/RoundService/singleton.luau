@@ -161,26 +161,33 @@ local function chooseGarbageMan()
 		end
 	end
 
-	-- ? Choosing logic
+	-- ? Choosing logic: weight = baseChance * (2x Garbage Man pass 2x)
+	local function getGarbageManMultiplier(plr: Player): number
+		local mult = 1
+		local plrData = Data.grabData(plr)
+		if plrData and plrData.passes["2x_garbage_man"] then
+			mult *= 2
+		end
+		return mult
+	end
+
 	local total = 0
 	local t = playerStates()
 
 	for plr, _ in pairs(t) do
 		local baseChance = plr:GetAttribute("garbageChance") or 0
-		local multiplier = if plr:GetAttribute("IsVIP") == true then 2 else 1
-
+		local multiplier = getGarbageManMultiplier(plr)
 		total += (baseChance * multiplier)
 	end
 
 	-- Adjusted Fallback: If no one has "garbageChance" (total is 0),
-	-- we give everyone a base weight but still respect the VIP 2x multiplier.
+	-- we give everyone a base weight but still respect 2x Garbage Man pass.
 	if total <= 0 then
 		local weightedPlayers = {}
 		local fallbackTotal = 0
 
 		for plr, _ in pairs(t) do
-			-- Give everyone a base weight of 1, VIPs get 2
-			local weight = if plr:GetAttribute("IsVIP") == true then 2 else 1
+			local weight = getGarbageManMultiplier(plr)
 			table.insert(weightedPlayers, { player = plr, weight = weight })
 			fallbackTotal += weight
 		end
@@ -206,8 +213,7 @@ local function chooseGarbageMan()
 
 	for plr, _ in pairs(t) do
 		local baseChance = plr:GetAttribute("garbageChance") or 0
-		local multiplier = if plr:GetAttribute("IsVIP") == true then 2 else 1
-
+		local multiplier = getGarbageManMultiplier(plr)
 		currentCount += (baseChance * multiplier)
 
 		if currentCount >= randomPoint then
@@ -333,12 +339,23 @@ local function awardRewards()
 			if survivorsWon then
 				--  Add Win Bonus & Trophy
 				coinsEarned += WIN_BONUS_COINS
+				crownsEarned = 1
 				plrData.crowns += 1
 			end
+
+			local earnedParts: { string } = {}
+			if coinsEarned > 0 then
+				table.insert(earnedParts, `{coinsEarned} coins`)
+			end
+			if crownsEarned > 0 then
+				table.insert(earnedParts, `{crownsEarned} trophy`)
+			end
+			local earnedSuffix = #earnedParts > 0 and (" You earned " .. table.concat(earnedParts, " and ") .. ".") or ""
+
 			if survivorsWon then
-				EventHandler:fireClient(plr, "sendNotification", `You won the round! You earned {coinsEarned} coins and {crownsEarned} trophy.`)
+				EventHandler:fireClient(plr, "sendNotification", "You won the round!" .. earnedSuffix)
 			else
-				EventHandler:fireClient(plr, "sendNotification", `You survived the round! You earned {coinsEarned}.`)
+				EventHandler:fireClient(plr, "sendNotification", "You survived the round!" .. earnedSuffix)
 			end
 			Data.mutateCurrency(plr, "coins", plrData.coins + coinsEarned)
 			Data.mutateCurrency(plr, "crowns", plrData.crowns + crownsEarned)
@@ -359,7 +376,18 @@ local function awardRewards()
 
 			-- Reward per death
 			coinsRewarded += math.floor(gmState.kills * COINS_PER_KILL)
-			EventHandler:fireClient(gm, "sendNotification", `You are the Garbage Man! You earned {coinsRewarded} coins and {crownsEarned} crowns.`)
+		end
+
+		local gmEarnedParts: { string } = {}
+		if coinsRewarded > 0 then
+			table.insert(gmEarnedParts, `{coinsRewarded} coins`)
+		end
+		if crownsEarned > 0 then
+			table.insert(gmEarnedParts, `{crownsEarned} crowns`)
+		end
+		local gmEarnedSuffix = #gmEarnedParts > 0 and (" You earned " .. table.concat(gmEarnedParts, " and ") .. ".") or ""
+		if gmWon then
+			EventHandler:fireClient(gm, "sendNotification", "You are the Garbage Man!" .. gmEarnedSuffix)
 		end
 
 		Data.mutateCurrency(gm, "coins", gmData.coins + coinsRewarded)
@@ -643,7 +671,9 @@ end)
 			roundState("Lobby")
 
 			while not checkForPlayers() do
-				task.wait(1)
+				local total = #Players:GetPlayers()
+				EventHandler:broadcast("sendNotification", `Not enough players to start the round. Need {playersNeeded - total} more.`)
+				task.wait(15)
 			end
 
 			for i = lobbyTime, 0, -1 do
@@ -651,6 +681,7 @@ end)
 				task.wait(1)
 			end
 
+			EventHandler:broadcast("sendNotification", "Round starting!")
 			roundState("InRound")
 			hasThrownThisRound(false)
 			forceEndRoundAfk(false)

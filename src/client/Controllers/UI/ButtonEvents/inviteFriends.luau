@@ -1,12 +1,13 @@
 local SocialService = game:GetService("SocialService")
-return function(player, from: GuiButton)
-	local s, canInvite = pcall(function()
-		return SocialService:CanSendCallInviteAsync(player)
+
+return function(player: Player, _from: GuiButton)
+	local success, canInvite = pcall(function()
+		return SocialService:CanSendGameInviteAsync(player)
 	end)
 
-	if s and canInvite then
+	if success and canInvite then
 		SocialService:PromptGameInvite(player)
 	else
-		warn("[SocialService from inviteFriends.luau] This player cannot send invites")
+		warn("[inviteFriends] This player cannot send game invites.")
 	end
 end
