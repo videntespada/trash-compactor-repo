@@ -69,7 +69,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 		end
 	end
 
-	print(fusionStates)
+	-- print(fusionStates)
 
 	ClientEvents.toggleUI:Connect(function(name: string)
 		if fusionStates[name] then

@@ -71,7 +71,6 @@ return function(type: "Snapped" | "Mouse", character: Model, toMove: Model, mous
 		end
 
 		prev = closestItem.instance
-		warn(`Positioning at ${closestItem.instance}`)
 
 		--! Debug
 		-- for i, v in ipairs(t) do

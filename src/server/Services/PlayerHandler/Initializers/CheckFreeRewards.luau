@@ -40,7 +40,7 @@ return function(player: Player)
 		if s.gameFavorited and s.gameLiked and s.groupJoined then
 			if not plrData.claimedReward then
 				plrData.claimedReward = true
-				-- TODO: Grant ability here
+				Data.mutateCurrency(player, "coins", plrData.coins + 250)
 			end
 		else
 			if not s.gameFavorited then

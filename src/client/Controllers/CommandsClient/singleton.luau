@@ -28,7 +28,7 @@ return {
 				return
 			end
 
-			-- /ability [name]
+			-- /ability [name] — client fires to server (legacy chat only)
 			if command == COMMAND_PREFIX .. "ability" then
 				local value = args[2]
 				if value then
@@ -39,25 +39,21 @@ return {
 				return
 			end
 
-			-- /coins [amount]
+			-- /coins and /crowns are handled only by server TextChatCommand to avoid double-apply.
+			-- If you use legacy chat and Chatted fires, the server still runs the command once via TextChatCommand.
+			-- So we do not fire onCommandSend for coins/crowns here.
 			if command == COMMAND_PREFIX .. "coins" then
 				local value = args[2]
 				local amount = value and tonumber(value)
-				if amount and amount > 0 then
-					EventHandler:fire("onCommandSend", "giveCoins", value)
-				else
+				if not amount or amount <= 0 then
 					warn("Usage: /coins [amount], e.g. /coins 100")
 				end
 				return
 			end
-
-			-- /crowns [amount]
 			if command == COMMAND_PREFIX .. "crowns" then
 				local value = args[2]
 				local amount = value and tonumber(value)
-				if amount and amount > 0 then
-					EventHandler:fire("onCommandSend", "giveCrowns", value)
-				else
+				if not amount or amount <= 0 then
 					warn("Usage: /crowns [amount], e.g. /crowns 5")
 				end
 			end

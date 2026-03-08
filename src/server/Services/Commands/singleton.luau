@@ -15,12 +15,20 @@ return {
 
 		local function giveCoins(player: Player, amount: number)
 			local plrData = Data.grabData(player)
+			if not plrData then
+				warn(`[Commands] No data for ${player.Name} - profile may still be loading`)
+				return
+			end
 			Data.mutateCurrency(player, "coins", plrData.coins + amount)
 			print(`Gave {player.Name} {amount} coins`)
 		end
 
 		local function giveCrowns(player: Player, amount: number)
 			local plrData = Data.grabData(player)
+			if not plrData then
+				warn(`[Commands] No data for ${player.Name} - profile may still be loading`)
+				return
+			end
 			Data.mutateCurrency(player, "crowns", plrData.crowns + amount)
 			print(`Gave {player.Name} {amount} crowns`)
 		end
@@ -66,6 +74,10 @@ return {
 
 			if what == "ability" then
 				local plrData = Data.grabData(who)
+				if not plrData then
+					warn("[Commands] No data for player - profile may still be loading")
+					return
+				end
 				plrData.ability = value
 			elseif what == "giveCoins" then
 				local amount = tonumber(value)

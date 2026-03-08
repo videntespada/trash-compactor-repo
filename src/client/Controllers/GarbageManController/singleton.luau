@@ -11,8 +11,16 @@ local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local Assets = ReplicatedStorage:WaitForChild("Assets")
 local TrashAssets = Assets:FindFirstChild("Trash") :: Folder
 
+local DEBUG_THROW = true
+local function debug(msg: string)
+	if DEBUG_THROW then
+		print("[GarbageManController]", msg)
+	end
+end
+
 return {
 	init = function()
+		debug("init started")
 		local player = Players.LocalPlayer
 		-- Do not store static references to GUI here, they die on respawn.
 
@@ -25,10 +33,12 @@ return {
 			-- Increased timeout to 10 just to be safe on slow loads
 			local actions = gui:WaitForChild("InputActions", 10)
 			if not actions then
-				warn("[Controller] Critical: InputActions folder not found!")
+				warn("[GarbageManController] Critical: InputActions folder not found!")
 				return nil
 			end
-			return actions:FindFirstChild("ThrowTrash")
+			local action = actions:FindFirstChild("ThrowTrash")
+			debug(`getThrowAction: actions={actions:GetFullName()}, ThrowTrash={action ~= nil}`)
+			return action
 		end
 
 		local function getDeviceType(): string
@@ -84,8 +94,12 @@ return {
 			end
 		end
 
-		-- Initial cleanup on load
+		-- Initial cleanup on load (hide throw button for non-GM, e.g. mobile)
 		cleanup(true)
+		-- Defer so InputActions/ThrowTrash may exist after UI loads; ensure button stays hidden
+		task.defer(function()
+			cleanup(true)
+		end)
 
 		-- Handle Respawn: When player dies, ensure UI is reset
 		player.CharacterAdded:Connect(function()
@@ -93,7 +107,7 @@ return {
 		end)
 
 		EventHandler:connectClient("toggleGarbageVisualization", function(toggle: boolean)
-			print(`[Controller] Toggle Visualization: {toggle}`)
+			debug(`toggleGarbageVisualization: {toggle}`)
 
 			if toggle then
 				-- FIX: Pass 'false' so we DON'T destroy the model the server just sent us
@@ -105,11 +119,13 @@ return {
 				-- Get Fresh Action
 				local ThrowTrashAction = getThrowAction()
 				if not ThrowTrashAction then
+					warn("[GarbageManController] toggle=true but ThrowTrashAction nil - cannot enable throw")
 					return
 				end
 
 				-- Enable Action
 				ThrowTrashAction.Enabled = true
+				debug("ThrowTrashAction.Enabled = true")
 				if platform == "Mobile" or platform == "Console" then
 					local binding = ThrowTrashAction:FindFirstChild("InputBinding")
 					if binding and binding:FindFirstChild("UIButton") then
@@ -119,11 +135,18 @@ return {
 
 				-- Connect Input
 				throwConnection = ThrowTrashAction.Released:Connect(function()
+					debug("ThrowTrashAction.Released fired")
 					if not currentModel then
-						warn("[Controller] Clicked, but currentModel is nil!")
+						warn("[GarbageManController] Clicked, but currentModel is nil!")
 						return
 					end
-					EventHandler:fire("throwTrash", currentModel:GetPivot())
+					debug("firing throwTrash with currentModel pivot")
+					local err = EventHandler:fire("throwTrash", currentModel:GetPivot())
+					if err then
+						warn("[GarbageManController] EventHandler:fire throwTrash failed:", err)
+					else
+						debug("throwTrash fire completed (no error return)")
+					end
 				end)
 
 				-- Connect Visual Loop
@@ -154,7 +177,7 @@ return {
 		end)
 
 		EventHandler:connectClient("changeTrash", function(to: string)
-			print(`[Controller] Changing trash to: {to}`)
+			debug(`changeTrash: {to}`)
 
 			local original = TrashAssets:FindFirstChild(to, true)
 			if original then
@@ -172,9 +195,10 @@ return {
 				found.Parent = workspace:FindFirstChild("Ignore") or workspace
 				currentModel = found
 			else
-				warn(`[Controller] Could not find trash asset: {to}`)
+				warn("[GarbageManController] Could not find trash asset:", to)
 			end
 		end)
+		debug("init finished")
 	end,
 	events = {},
 }

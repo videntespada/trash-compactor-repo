@@ -9,7 +9,13 @@ return {
 		local plrData = Data.grabData(player)
 		plrData.abilityInventory[#plrData.abilityInventory + 1] = "Wall"
 		-- Update client UI
-		EventHandler:fireClient(player, "loadAbilitiyInventoryData", plrData.abilityInventory)
+		EventHandler:fireClient(
+			player,
+			"loadAbilitiyInventoryData",
+			plrData.abilityInventory,
+			plrData.ability,
+			plrData.crowns
+		)
 		return true
 	end,
 }

@@ -1,9 +1,11 @@
 local ServerScriptService = game:GetService("ServerScriptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Data = require(ServerScriptService.Server.Modules.DataStore.Data)
 local Template = require(ServerScriptService.Server.Modules.DataStore.Template)
-local SECONDS_IN_A_DAY = 86400
+local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 
+local SECONDS_IN_A_DAY = 86400
 local function getCurrentDayID(): number
 	return math.floor(os.time() / SECONDS_IN_A_DAY)
 end
@@ -33,6 +35,9 @@ return function(player: Player)
 		end
 		warn(`Reward given for streak ${plrData.dayStreak}`)
 
+		plrData.todayClaimed = false
 		plrData.lastLogin = os.time()
 	end
+	print(plrData.dayStreak)
+	EventHandler:fireClient(player, "updateDailyReward", plrData.dayStreak, plrData.todayClaimed)
 end

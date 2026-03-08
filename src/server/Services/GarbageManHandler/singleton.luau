@@ -1,13 +1,27 @@
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local TrashClass = require(ServerScriptService.Server.Classes.TrashClass)
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
+
+local NORMAL_THROW_COOLDOWN = 1
+local RUSH_THROW_COOLDOWN = 0.5
+local RUSH_TIME_LEFT_THRESHOLD = 20
+
+local DEBUG_THROW = true
+local function debug(msg: string)
+	if DEBUG_THROW then
+		print("[GarbageManHandler]", msg)
+	end
+end
+
 return {
 	init = function()
+		debug("init started")
 		local Map = workspace:WaitForChild("Map") :: Folder
 		local Scriptable = Map:FindFirstChild("Scriptable") :: Folder
 		local PlaceZone = Scriptable:FindFirstChild("PlaceZone") :: Part
@@ -30,26 +44,43 @@ return {
 		end
 
 		-- When they click to place
-		EventHandler:connect("throwTrash", function(player: Player, start: CFrame)
+		local connectResult = EventHandler:connect("throwTrash", function(player: Player, start: CFrame)
+			debug(`throwTrash received from {player.Name}`)
 			if not player:HasTag("GarbageMan") then
+				debug(`throwTrash REJECT: {player.Name} does not have GarbageMan tag`)
 				return
 			end
 			if player:HasTag("ThrowDB") then
+				debug(`throwTrash REJECT: {player.Name} has ThrowDB (cooldown)`)
 				return
 			end
 
 			if not toThrow or not toThrow.Parent then
 				toThrow = chooseNewTrash()
+				debug(`throwTrash: chose new trash, toThrow={toThrow and toThrow.Name or "nil"}`)
 			end
 
-			-- Debounce
+			-- Debounce: much shorter when 20 seconds or less left (rush mode) via shared BoolValue from RoundService
+			local cooldown = NORMAL_THROW_COOLDOWN
+			do
+				local server = ServerScriptService:FindFirstChild("Server")
+				local rushVal = server and server:FindFirstChild("RushMode")
+				if rushVal and rushVal:IsA("BoolValue") and rushVal.Value then
+					cooldown = RUSH_THROW_COOLDOWN
+				end
+			end
 			player:AddTag("ThrowDB")
-			task.delay(1, function()
+			task.delay(cooldown, function()
 				player:RemoveTag("ThrowDB")
 			end)
 
 			local character = player.Character
+			if not character then
+				debug(`throwTrash REJECT: {player.Name} has no Character`)
+				return
+			end
 
+			debug(`throwTrash EXECUTE: {player.Name}, cooldown={cooldown}`)
 			-- Throw Mechanic
 			toThrow:PivotTo(start)
 
@@ -91,7 +122,13 @@ return {
 			local chosen = chooseNewTrash()
 			toThrow = chosen
 			EventHandler:fireClient(player, "changeTrash", chosen.Name)
+			debug(`throwTrash DONE: {player.Name}`)
 		end)
+		if typeof(connectResult) == "string" then
+			warn("[GarbageManHandler] connect(throwTrash) failed:", connectResult)
+		else
+			debug("connect(throwTrash) OK")
+		end
 
 		-- ? Bomb breaking trash
 		ServerEvents.bombBreakTrash:Connect(function(model: Model)
@@ -113,25 +150,29 @@ return {
 		-- ? Enabling/Disaibling mechanics.
 		CollectionService:GetInstanceAddedSignal("GarbageMan"):Connect(function(a)
 			if a:IsA("Player") then
-				local player = a
-
-				-- ! Enable
-				-- Choose first trash
+				local newGM = a
+				debug(`GarbageMan tag added to {newGM.Name} - enabling visualization`)
+				-- Ensure all other players have throw UI hidden (e.g. mobile)
+				for _, other in Players:GetPlayers() do
+					if other ~= newGM then
+						EventHandler:fireClient(other, "toggleGarbageVisualization", false)
+					end
+				end
+				-- Enable for the new GM
 				toThrow = chooseNewTrash()
-				EventHandler:fireClient(player, "changeTrash", toThrow.Name)
-				EventHandler:fireClient(player, "toggleGarbageVisualization", true)
-				print("Enabling garbage visualization stuff")
+				EventHandler:fireClient(newGM, "changeTrash", toThrow.Name)
+				EventHandler:fireClient(newGM, "toggleGarbageVisualization", true)
 			end
 		end)
 
 		CollectionService:GetInstanceRemovedSignal("GarbageMan"):Connect(function(a)
 			if a:IsA("Player") then
 				local player = a
-				-- ! Disaible
-				print("disaibling")
+				debug(`GarbageMan tag removed from {player.Name}`)
 				EventHandler:fireClient(player, "toggleGarbageVisualization", false)
 			end
 		end)
+		debug("init finished")
 	end,
 	events = {
 		"throwTrash",

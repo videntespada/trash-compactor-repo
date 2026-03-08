@@ -23,9 +23,17 @@ local garbageMan = atom(nil)
 local nextGarbageManTable: { Player } = {}
 local diedConnections: { [Player]: RBXScriptConnection } = {}
 
+-- Anti-AFK: if garbageman doesn't throw within 20s of round start, round ends
+local hasThrownThisRound = atom(false)
+local forceEndRoundAfk = atom(false)
+local AFK_WARN_SECONDS = 10
+local AFK_END_SECONDS = 20
+
+local RUSH_THRESHOLD_SECONDS = 20 -- When this many seconds left, throw cooldown is reduced
+
 local lobbyTime = 15
 local intermissionTime = 5
-local roundLength = 20
+local roundLength = 60
 local playersNeeded = 2
 
 local eventFunctions: { [string]: (timeLeft: number, ...any) -> () } = {}
@@ -144,7 +152,7 @@ local function chooseGarbageMan()
 
 			for i, waitingPlr in ipairs(nextGarbageManTable) do
 				warn(`{waitingPlr.Name} is still in queue (Position {i}).`)
-				-- TODO: Give notification of which round they'll be Garbage Man
+				EventHandler:fireClient(waitingPlr, "sendNotification", `You are still in the queue for Garbage Man. You will be chosen in {i} rounds.`)
 			end
 
 			return chosen
@@ -327,6 +335,11 @@ local function awardRewards()
 				coinsEarned += WIN_BONUS_COINS
 				plrData.crowns += 1
 			end
+			if survivorsWon then
+				EventHandler:fireClient(plr, "sendNotification", `You won the round! You earned {coinsEarned} coins and {crownsEarned} trophy.`)
+			else
+				EventHandler:fireClient(plr, "sendNotification", `You survived the round! You earned {coinsEarned}.`)
+			end
 			Data.mutateCurrency(plr, "coins", plrData.coins + coinsEarned)
 			Data.mutateCurrency(plr, "crowns", plrData.crowns + crownsEarned)
 		end
@@ -346,6 +359,7 @@ local function awardRewards()
 
 			-- Reward per death
 			coinsRewarded += math.floor(gmState.kills * COINS_PER_KILL)
+			EventHandler:fireClient(gm, "sendNotification", `You are the Garbage Man! You earned {coinsRewarded} coins and {crownsEarned} crowns.`)
 		end
 
 		Data.mutateCurrency(gm, "coins", gmData.coins + coinsRewarded)
@@ -357,9 +371,9 @@ ServerEvents.sendRoundEvent:Connect(function(eventName: types.EventStates)
 	eventQueue(function(old): { "Avalanche" | "Fog" | "Ice" | "None" }
 		local new = table.clone(old)
 		table.insert(new, eventName)
+		-- EventHandler:broadcast("sendNotification", `Your ${eventName} event will play in {#old} rounds.`)
 		return new
 	end)
-	-- TODO: UI Notification of which round the event will play
 	warn(`Added ${eventName}`)
 end)
 
@@ -415,7 +429,7 @@ ServerEvents.forceChooseGarbageMan:Connect(function(player: Player)
 	-- If they aren't the only one in the queue, warn them they are waiting
 	if #nextGarbageManTable > 1 then
 		warn(`{player.Name} bought Garbage Man, but there is a queue. They are position {#nextGarbageManTable}.`)
-		-- TODO: Send a UI notification
+		EventHandler:fireClient(player, "sendNotification", `You bought Garbage Man! But there is a queue. You're in position {#nextGarbageManTable}.`)
 	end
 end)
 
@@ -429,10 +443,23 @@ ServerEvents.onGarbageManKill:Connect(function(who: Player)
 	end)
 end)
 
-return {
+	return {
+	getRoundTimeLeft = function()
+		return timeCounter()
+	end,
+	getRoundState = function()
+		return roundState()
+	end,
 	init = function()
 		EventHandler:connect("requestRevive", function(player: Player)
 			player:LoadCharacterAsync()
+		end)
+
+		-- Anti-AFK: mark that garbageman has thrown so we don't end the round
+		EventHandler:connect("throwTrash", function(player: Player)
+			if player == garbageMan() then
+				hasThrownThisRound(true)
+			end
 		end)
 
 		-- ? Setup fire pit
@@ -598,9 +625,19 @@ return {
 				end
 				-- Prompt show become garbageman pass
 				showGarbageManPurchase(true)
-				-- TODO: Show stats
 			end
 		end)
+
+		-- Shared state for rush mode (GarbageManHandler reads this; no cross-require)
+		local serverFolder = ServerScriptService:WaitForChild("Server") :: Folder
+		local existing = serverFolder:FindFirstChild("RushMode")
+		local rushModeValue: BoolValue = if existing and existing:IsA("BoolValue") then existing else (function()
+			local v = Instance.new("BoolValue")
+			v.Name = "RushMode"
+			v.Value = false
+			v.Parent = serverFolder
+			return v
+		end)()
 
 		while true do
 			roundState("Lobby")
@@ -615,9 +652,46 @@ return {
 			end
 
 			roundState("InRound")
+			hasThrownThisRound(false)
+			forceEndRoundAfk(false)
+			rushModeValue.Value = false
+			local hasNotifiedRush = false
+
+			-- Anti-AFK: warn at 10s, end round at 20s if garbageman hasn't thrown
+			task.spawn(function()
+				local gm = garbageMan()
+				if not gm then
+					return
+				end
+				task.wait(AFK_WARN_SECONDS)
+				if roundState() ~= "InRound" or garbageMan() ~= gm then
+					return
+				end
+				if not hasThrownThisRound() then
+					EventHandler:fireClient(gm, "sendNotification", "Wake up! Throw some trash!")
+				end
+				task.wait(AFK_END_SECONDS - AFK_WARN_SECONDS)
+				if roundState() ~= "InRound" or garbageMan() ~= gm then
+					return
+				end
+				if not hasThrownThisRound() then
+					EventHandler:fireClient(gm, "sendNotification", "Round ended — you were AFK!")
+					forceEndRoundAfk(true)
+				end
+			end)
 
 			for i = roundLength, 0, -1 do
 				timeCounter(i)
+
+				-- Notify GM once when rush mode starts (20 seconds left); set shared state for throw cooldown
+				if i <= RUSH_THRESHOLD_SECONDS and not hasNotifiedRush then
+					hasNotifiedRush = true
+					rushModeValue.Value = true
+					local gm = garbageMan()
+					if gm then
+						EventHandler:fireClient(gm, "sendNotification", "Rush mode! Throw cooldown reduced!")
+					end
+				end
 
 				for plr, stat in pairs(playerStates()) do
 					stat.survivedTime += 1
@@ -627,11 +701,16 @@ return {
 				if nonGarbageManCount() == 0 or garbageMan() == nil then
 					break
 				end
+				-- ! Break early if garbageman was AFK (no throw within 20s)
+				if forceEndRoundAfk() then
+					break
+				end
 
 				task.wait(1)
 			end
 
 			roundState("Intermission")
+			rushModeValue.Value = false
 
 			for i = intermissionTime, 0, -1 do
 				timeCounter(i)

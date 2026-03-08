@@ -14,20 +14,15 @@ local clientLoadEvent = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("c
 
 type ReturnType = {
 	init: () -> (),
-	events: { string },
+	events: { string }?,
 }
 
 local toInit: { () -> () } = {}
 
+-- Only server creates RemoteEvents; client just runs inits
 for _, v in ipairs(Controllers:GetChildren() :: { Folder }) do
 	local mod: ModuleScript = v:WaitForChild("singleton")
 	local req: ReturnType = require(mod)
-
-	-- * Read all events, and initialize remotes
-	for _, ev in req.events do
-		EventHandler:createEvent(ev)
-	end
-
 	toInit[1 + #toInit] = req.init
 end
 

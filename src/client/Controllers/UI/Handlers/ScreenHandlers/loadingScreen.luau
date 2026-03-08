@@ -25,9 +25,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	end
 
 	for _, item in ipairs(ReplicatedStorage:GetDescendants()) do
-		if item:IsA("MeshPart") or item:IsA("Decal") then
-			table.insert(states.toLoad, item)
-		end
+		table.insert(states.toLoad, item)
 	end
 
 	for _, item in ipairs(gui:GetDescendants()) do
@@ -68,6 +66,9 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	ContentProvider:PreloadAsync(states.toLoad, function(content: string, status: Enum.AssetFetchStatus)
 		if status == Enum.AssetFetchStatus.Success then
 			states.loaded:set(peek(states.loaded) + 1)
+			task.wait(0.5)
+		elseif status == Enum.AssetFetchStatus.Failure or status == Enum.AssetFetchStatus.TimedOut then
+			warn(`Failed to load asset {content} with status {status}.`)
 			task.wait(0.5)
 		end
 	end)

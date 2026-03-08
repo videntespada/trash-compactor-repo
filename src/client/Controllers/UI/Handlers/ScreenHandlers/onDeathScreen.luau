@@ -4,6 +4,7 @@ local StarterPlayer = game:GetService("StarterPlayer")
 local ClientEvents = require(StarterPlayer.StarterPlayerScripts.Client.ClientEvents)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 local Fusion = require(ReplicatedStorage.Shared.Fusion)
+local peek = require(ReplicatedStorage.Shared.Fusion.State.peek)
 
 return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: PlayerGui)
 	local baseUI = gui:WaitForChild("ScreenGui") :: ScreenGui
@@ -43,6 +44,8 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 		end),
 	})
 
+	local FORCE_RESPAWN_SECONDS = 10
+
 	local function onDeathScreen(toggle: boolean, showBottom: boolean?)
 		state.isVisible:set(toggle)
 		if showBottom ~= nil then
@@ -50,6 +53,15 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 		end
 		if not toggle then
 			state.showBottomButtons:set(true)
+		end
+		if toggle then
+			task.delay(FORCE_RESPAWN_SECONDS, function()
+				if peek(state.isVisible) then
+					state.isVisible:set(false)
+					state.showBottomButtons:set(true)
+					EventHandler:fire("requestRevive")
+				end
+			end)
 		end
 	end
 

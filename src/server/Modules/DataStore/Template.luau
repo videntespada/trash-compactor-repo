@@ -6,6 +6,7 @@ export type TemplateType = {
 	lastLogin: number,
 	dayStreak: number,
 	claimedReward: boolean,
+	todayClaimed: boolean,
 	passes: {
 		["2x_coins"]: boolean,
 		vip: boolean,
@@ -13,9 +14,9 @@ export type TemplateType = {
 	},
 }
 return {
-	crowns = 100,
+	crowns = 0,
 	coins = 50,
-	ability = "Wall",
+	ability = "",
 	abilityInventory = {},
 	lastLogin = 0,
 	dayStreak = 0,

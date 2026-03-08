@@ -54,7 +54,18 @@ function TrashClass:CreateBounding()
 
 	local center = model.PrimaryPart
 	if not center then
-		return "[TrashClass] No PrimaryPart"
+		center = model:FindFirstChildWhichIsA("BasePart")
+		if not center then
+			for _, desc in model:GetDescendants() do
+				if desc:IsA("BasePart") then
+					center = desc
+					break
+				end
+			end
+		end
+		if not center then
+			return "[TrashClass] No PrimaryPart or BasePart"
+		end
 	end
 
 	local pivot, modelSize = model:GetBoundingBox()
@@ -71,7 +82,7 @@ function TrashClass:CreateBounding()
 	box.Parent = model
 
 	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = center
+	weld.Part0 = center :: BasePart
 	weld.Part1 = box
 	weld.Parent = model
 	self._bounding = box
@@ -86,6 +97,17 @@ function TrashClass:ProcessHit(character: Model)
 	end
 
 	local player = Players:GetPlayerFromCharacter(character)
+	if not player then
+		return
+	end
+
+	if player:HasTag("iFrame") then
+		return
+	end
+	player:AddTag("iFrame")
+	task.delay(0.1, function()
+		player:RemoveTag("iFrame")
+	end)
 
 	if player and player:HasTag("hasShield") then
 		warn(`${player} has hit`)
@@ -125,7 +147,7 @@ function TrashClass:ProcessHit(character: Model)
 	local isFinalBlow = (humanoid.Health - 25) <= 0
 	local soundId = isFinalBlow and DEATH_SOUNDS[math.random(1, #DEATH_SOUNDS)]
 		or IMPACT_SOUNDS[math.random(1, #IMPACT_SOUNDS)]
-	
+
 	if isFinalBlow and self.owner then
 		ServerEvents.onGarbageManKill:Fire(self.owner)
 	end
@@ -144,7 +166,7 @@ function TrashClass:ProcessHit(character: Model)
 	bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
 	bv.Velocity = (Vector3.yAxis * 20) + (character:GetPivot().LookVector * -42)
 	bv.Parent = root
-	Debris:AddItem(bv, 0.1)
+	Debris:AddItem(bv, 0.3)
 end
 
 -- Detection Logic
@@ -162,6 +184,9 @@ function TrashClass:StartHitbox()
 		end
 
 		local touchedModel = otherPart:FindFirstAncestorWhichIsA("Model")
+		if not touchedModel then
+			return
+		end
 
 		if touchedModel.Parent == Workspace:FindFirstChild("Ignore") then
 			-- ? All mechanics are seperated by tags of what it touched.

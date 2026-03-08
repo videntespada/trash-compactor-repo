@@ -42,8 +42,12 @@ return {
 				return
 			end
 			if not player:HasTag("InRound") then
-				-- TODO: Notification saying that they arent in round
+				EventHandler:fireClient(player, "sendNotification", "Can't use abilities while you are not in the round.")
 				warn(`${player} isn't in round`)
+				return
+			end
+			if player:HasTag("GarbageMan") then
+				EventHandler:fireClient(player, "sendNotification", "Can't use abilities while you are the garbage man.")
 				return
 			end
 			local ability = dta.ability
@@ -66,8 +70,7 @@ return {
 
 			if timeSinceLastUsed < cd then
 				local waitTime = math.ceil(cd - timeSinceLastUsed)
-				warn(`Ability on cooldown! Wait ${waitTime}s`)
-				-- TODO: Send notification of remaining time left on cd
+				EventHandler:fireClient(player, "sendNotification", `Ability on cooldown! Wait ${waitTime}s`)
 				return
 			end
 

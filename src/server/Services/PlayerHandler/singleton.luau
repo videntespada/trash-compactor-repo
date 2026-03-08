@@ -14,12 +14,27 @@ return {
 			Data.playerAdded(player)
 
 			local plrData = Data.grabData(player)
+			if not plrData then
+				warn("[PlayerHandler] No data for " .. player.Name .. " - skipping init")
+				return
+			end
+
+			-- Test notification
+			-- task.delay(4, function()
+			-- 	EventHandler:fireClient(player, "sendNotification", `Welcome to the game! You have {plrData.coins} coins and {plrData.crowns} crowns.`)
+			-- end)
 
 			task.delay(5, function()
 				EventHandler:fireClient(player, "changeCurrency", "crowns", plrData.crowns)
 				EventHandler:fireClient(player, "changeCurrency", "coins", plrData.coins)
 				-- Load Abilities to abilityframe
-				EventHandler:fireClient(player, "loadAbilitiyInventoryData", plrData.abilityInventory, plrData.ability)
+				EventHandler:fireClient(
+					player,
+					"loadAbilitiyInventoryData",
+					plrData.abilityInventory,
+					plrData.ability,
+					plrData.crowns
+				)
 			end)
 
 			-- ? Check for daily rewards
@@ -68,5 +83,6 @@ return {
 		"promptJoinGroup",
 		"toggleJoinedGroup",
 		"loadAbilitiyInventoryData",
+		"sendNotification",
 	},
 }
