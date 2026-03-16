@@ -39,5 +39,9 @@ return function(player: Player)
 		plrData.lastLogin = os.time()
 	end
 	print(plrData.dayStreak)
-	EventHandler:fireClient(player, "updateDailyReward", plrData.dayStreak, plrData.todayClaimed)
+	if plrData.dailyRewardsUnlocked then
+		EventHandler:fireClient(player, "updateDailyReward", 7, false, plrData.claimedDailyDays or {})
+	else
+		EventHandler:fireClient(player, "updateDailyReward", plrData.dayStreak, plrData.todayClaimed)
+	end
 end

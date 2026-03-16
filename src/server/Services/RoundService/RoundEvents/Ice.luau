@@ -48,7 +48,9 @@ local function setToNormal(list: { Part })
 	end
 end
 
-return function(timeLeft: number)
+local EVENT_DURATION = 15
+
+return function()
 	local listOfPlayers = getPlayersInRound()
 	local Map = workspace:WaitForChild("Map") :: Folder
 	local Scriptable = Map:FindFirstChild("Scriptable") :: Folder
@@ -67,7 +69,8 @@ return function(timeLeft: number)
 
 	setToIce(parts)
 
-	for i = timeLeft, -1, 0 do
+	-- Run once per second for EVENT_DURATION seconds, or until no survivors left.
+	for i = EVENT_DURATION, 0, -1 do
 		listOfPlayers = getPlayersInRound()
 		if hasEnoughPlayers(listOfPlayers) then
 			break

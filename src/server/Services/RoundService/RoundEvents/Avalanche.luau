@@ -44,7 +44,9 @@ local function hasEnoughPlayers(list: { Player }): boolean
 	end
 end
 
-return function(timeLeft: number)
+local EVENT_DURATION = 15
+
+return function()
 	local listOfPlayers = getPlayersInRound()
 	local trashList = TrashAssets:GetChildren() :: { Model }
 	local alarmSound = Instance.new("Sound")
@@ -65,7 +67,20 @@ return function(timeLeft: number)
 		rumbleSound:Destroy()
 	end)
 
-	for i = timeLeft, -1, 0 do
+	-- Current GarbageMan gets credit for avalanche kills (environment hazard during their round).
+	local function getCurrentGarbageMan(): Player?
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p:HasTag("GarbageMan") then
+				return p
+			end
+		end
+		return nil
+	end
+
+	local gm = getCurrentGarbageMan()
+
+	-- Run once per second for EVENT_DURATION seconds, or until no survivors left.
+	for i = EVENT_DURATION, 0, -1 do
 		-- ? Check if avalanch killed all players
 		listOfPlayers = getPlayersInRound()
 		if hasEnoughPlayers(listOfPlayers) then
@@ -85,8 +100,8 @@ return function(timeLeft: number)
 		currentTrash:PivotTo(randomPosOnPlaceZone() * CFrame.Angles(rndmAxis, rndmAxis, rndmAxis))
 		push(currentTrash)
 
-		-- ? Attach functionality
-		local TrashObject = TrashClass.new(currentTrash, true)
+		-- ? Attach functionality; kills attribute to current GarbageMan.
+		local TrashObject = TrashClass.new(gm, currentTrash, false)
 		local s, e = pcall(function()
 			TrashObject:CreateBounding()
 		end)
@@ -96,6 +111,6 @@ return function(timeLeft: number)
 			warn(`[From AvalancheEvent] {e} \n\nCleaning TrashObject for {TrashObject.model}.`)
 			TrashObject:Clean()
 		end
-		task.wait(1)
+		task.wait(0.4)
 	end
 end

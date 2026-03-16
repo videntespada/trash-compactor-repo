@@ -8,6 +8,7 @@ function module.Ragdoll(char: Model)
 	if humanoid:GetState() == Enum.HumanoidStateType.Physics then
 		return
 	end
+	char:SetAttribute("Ragdolled", true)
 	humanoid.BreakJointsOnDeath = false
 
 	for index, joint in pairs(char:GetDescendants()) do
@@ -119,6 +120,7 @@ function module.TimedRagdoll(char: Model, sec: number) -- uhh
 	end
 	local plr = game.Players:GetPlayerFromCharacter(char)
 	remote:FireClient(plr, "Make", sec)
+	char:SetAttribute("Ragdolled", true)
 	if humanoid:GetState() ~= Enum.HumanoidStateType.Physics then
 		for index, joint in pairs(char:GetDescendants()) do
 			if joint:IsA("Motor6D") then
@@ -156,6 +158,7 @@ function module.TimedRagdoll(char: Model, sec: number) -- uhh
 
 		task.wait(sec)
 
+		char:SetAttribute("Ragdolled", false)
 		local plr = game.Players:GetPlayerFromCharacter(char)
 		if plr then
 			remote:FireClient(plr, "Destroy", sec)
@@ -177,6 +180,7 @@ function module.TimedRagdoll(char: Model, sec: number) -- uhh
 end
 
 function module.Unragdoll(char: CharacterMesh) -- again, the character
+	char:SetAttribute("Ragdolled", false)
 	for index, joint in pairs(char:GetDescendants()) do
 		if joint:IsA("Motor6D") then
 			if not remote then

@@ -10,6 +10,8 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	local ContentFrame = TopFrame:FindFirstChild("Content") :: Frame
 	local TimerText = ContentFrame:FindFirstChild("Timer") :: TextLabel
 
+	local defaultColor = TimerText.TextColor3
+
 	local function toMMSS(seconds: number): string
 		local minutes = math.floor(seconds / 60)
 		local remainingSeconds = math.floor(seconds % 60)
@@ -20,6 +22,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	local states = {
 		size = scope:Value(UDim2.fromScale(0.287, 0.55)),
 		text = scope:Value(TimerText.Text),
+		color = scope:Value(defaultColor),
 	}
 
 	scope:Hydrate(TimerText)({
@@ -29,6 +32,9 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 				states.size:set(UDim2.fromScale(0.287, 0.55))
 			end)
 			return use(states.text)
+		end),
+		TextColor3 = scope:Computed(function(use)
+			return use(states.color)
 		end),
 		Size = scope:Spring(
 			scope:Computed(function(use)
@@ -41,5 +47,12 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 
 	EventHandler:connectClient("changeTimerUI", function(timeLeft: number)
 		states.text:set(toMMSS(timeLeft))
+
+		-- When rush mode begins (~20s left), make the timer red; otherwise use default.
+		if timeLeft <= 20 then
+			states.color:set(Color3.fromRGB(255, 0, 0))
+		else
+			states.color:set(defaultColor)
+		end
 	end)
 end

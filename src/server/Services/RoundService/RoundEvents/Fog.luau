@@ -24,9 +24,11 @@ local function hasEnoughPlayers(list: { Player }): boolean
 	end
 end
 
-return function(timeLeft: number)
+local EVENT_DURATION = 15
+
+return function()
 	local listOfPlayers = getPlayersInRound()
-	local eventActive: Charm.Atom<boolean> = atom(false)
+	local eventActive = atom(false)
 
 	subscribe(eventActive, function(state, _prev)
 		if state then
@@ -52,7 +54,7 @@ return function(timeLeft: number)
 
 	eventActive(true)
 
-	for _i = timeLeft, 0, -1 do
+	for _i = EVENT_DURATION, 0, -1 do
 		listOfPlayers = getPlayersInRound()
 		if hasEnoughPlayers(listOfPlayers) then
 			if sound then

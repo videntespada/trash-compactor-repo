@@ -1,12 +1,27 @@
 local Debris = game:GetService("Debris")
+
+local COOLDOWN = 4
+local DURATION = 0.15 -- burst length
+local BURST_SPEED = 65 -- studs/s
+local SFX_DASH_ACTIVATE = "rbxassetid://127294362110618"
+
 return {
-	Cooldown = 3,
+	Cooldown = COOLDOWN,
 	init = function(player: Player, AssetFolder: Folder)
 		local character = player.Character
 		if not character then
 			return
 		end
-		local p = (AssetFolder:FindFirstChild("DashEffect") :: Instance):Clone() :: Instance
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root then
+			local sound = Instance.new("Sound")
+			sound.SoundId = SFX_DASH_ACTIVATE
+			sound.Volume = 1
+			sound.Parent = root
+			sound:Play()
+			Debris:AddItem(sound, 3)
+		end
+		local p = (AssetFolder:FindFirstChild("DashEffect") :: Part):Clone() :: Part
 		if not p then
 			return
 		end
@@ -23,7 +38,6 @@ return {
 		local direction = -Vector3.new(forward.X, 0, forward.Z)
 
 		Dash.CFrame = CFrame.lookAt(root.Position, root.Position + direction)
-		-- Emit particles
 		for _, dash in ipairs(Dash:GetDescendants()) do
 			if dash:IsA("ParticleEmitter") then
 				dash:Emit(dash:GetAttribute("EmitCount"))
@@ -32,25 +46,20 @@ return {
 
 		local frameCount = 16
 		local fps = 12
-
-		-- Initial setup: Hide all frames
 		for _, child in ipairs(decalFolder:GetChildren()) do
 			if child:IsA("Decal") then
 				child.Transparency = 1
 			end
 		end
-
-		-- Animation Loop
 		task.spawn(function()
 			while true do
 				for i = 1, frameCount do
 					local frameName = tostring(i)
 					local currentDecal = decalFolder:FindFirstChild(frameName)
-
 					if currentDecal then
-						currentDecal.Transparency = 0 -- Show frame
+						currentDecal.Transparency = 0
 						task.wait(1 / fps)
-						currentDecal.Transparency = 1 -- Hide frame
+						currentDecal.Transparency = 1
 					end
 				end
 				task.wait()
@@ -66,9 +75,8 @@ return {
 
 		local bv = Instance.new("BodyVelocity")
 		bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
-		-- in lookdirection, slightly upwards
-		bv.Velocity = (root.CFrame.LookVector * 75)
+		bv.Velocity = root.CFrame.LookVector * BURST_SPEED
 		bv.Parent = root
-		Debris:AddItem(bv, 0.1)
+		Debris:AddItem(bv, DURATION)
 	end,
 }

@@ -196,6 +196,8 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 					end
 					if abilityName == "Wall" and amountNeeded then
 						amountNeeded.Text = "GAMEPASS"
+					elseif abilityName == "Bat" and amountNeeded then
+						amountNeeded.Text = "7 Day Streak"
 					end
 				end
 			end

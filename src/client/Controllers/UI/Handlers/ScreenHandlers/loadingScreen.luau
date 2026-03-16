@@ -1,5 +1,6 @@
 local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local StarterPlayer = game:GetService("StarterPlayer")
 
 
@@ -13,6 +14,7 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 	local baseUI = gui:WaitForChild("ScreenGui") :: ScreenGui
 	local Loading = baseUI:FindFirstChild("Loading") :: Frame
 	local MainFrame = Loading:FindFirstChild("Main") :: Frame
+	local Logo = Loading:FindFirstChild("Logo") :: ImageLabel
 	local Progress = MainFrame:FindFirstChild("Progressbar") :: Frame
 	local ProgressBar = Progress:FindFirstChild("Progress") :: Frame
 
@@ -22,8 +24,24 @@ return function(player: Player, scope: Fusion.Scope<typeof(Fusion)>, gui: Player
 		toLoad = {},
 	}
 
-	ClientEvents.skipLoadingScreen:Connect(function(...) 
+	ClientEvents.skipLoadingScreen:Connect(function()
 		states.visible:set(false)
+	end)
+
+	-- Logo rock animation: -5° -> 5° -> -5° sine wave; stops when loading is done or skipped
+	local rockAmplitude = 5
+	local rockSpeed = 1.5
+	local rockStartTime = tick()
+	local rockConnection: RBXScriptConnection?
+	rockConnection = RunService.Heartbeat:Connect(function()
+		if not peek(states.visible) then
+			if rockConnection then
+				rockConnection:Disconnect()
+				rockConnection = nil
+			end
+			return
+		end
+		Logo.Rotation = rockAmplitude * math.sin(rockSpeed * (tick() - rockStartTime))
 	end)
 
 	for _, item in ipairs(workspace:GetDescendants()) do

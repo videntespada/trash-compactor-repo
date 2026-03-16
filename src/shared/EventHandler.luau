@@ -1,6 +1,6 @@
 local m = {}
 
-local DEBUG_EVENTS = true -- [throwTrash] set to false to silence debug
+local DEBUG_EVENTS = false -- set to true temporarily when debugging remotes
 local function debug(msg: string)
 	if DEBUG_EVENTS then
 		print("[EventHandler]", msg)

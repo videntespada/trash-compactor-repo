@@ -1,8 +1,11 @@
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
+local SpawnGeneralVFX = require(ReplicatedStorage.Shared.SpawnGeneralVFX)
+
+local SFX_BOMB_IMPACT = "rbxassetid://80722315074885"
+
 return function(BombModel: Model, character: Model, Map: Folder, endPos)
 	local copiedModel = BombModel:Clone() :: Model
 	copiedModel.Parent = workspace:FindFirstChild("Ignore")
@@ -26,7 +29,7 @@ return function(BombModel: Model, character: Model, Map: Folder, endPos)
 	-- 5 studs above midway
 	controlPos = startPos:Lerp(endPos, 0.5) * CFrame.new(0, 5, 0)
 
-	local resolution = 25
+	local resolution = 45 -- slower arc (more steps, longer flight)
 
 	copiedModel:PivotTo(startPos)
 
@@ -46,6 +49,14 @@ return function(BombModel: Model, character: Model, Map: Folder, endPos)
 			v.Transparency = 1
 		end
 	end
+	SpawnGeneralVFX("TrashHit", copiedModel:GetPivot(), 4)
+	-- Bomb impact SFX at explosion position
+	local impactSound = Instance.new("Sound")
+	impactSound.SoundId = SFX_BOMB_IMPACT
+	impactSound.Volume = 1
+	impactSound.Parent = copiedModel
+	impactSound:Play()
+	Debris:AddItem(impactSound, 4)
 
 	EventHandler:fire("onBombFinish")
 end

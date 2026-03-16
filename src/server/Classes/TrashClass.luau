@@ -7,35 +7,47 @@ local Workspace = game:GetService("Workspace")
 
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local RagdollModule = require(ReplicatedStorage.Shared.RagdollModule)
+local SpawnGeneralVFX = require(ReplicatedStorage.Shared.SpawnGeneralVFX)
 
 -- Move static data outside to avoid re-creating tables on every hit
-local DEATH_SOUNDS =
-	{ "7772283448", "18900008907", "8551016315", "6349641063", "17712048342", "114739399228816", "6701126635" }
+local SFX_DEATH = "rbxassetid://74019976925686"
+local SFX_HAMMER_IMPACT = "rbxassetid://106564312157503"
 local IMPACT_SOUNDS =
 	{ "7772283448", "18900008907", "8551016315", "6349641063", "17712048342", "114739399228816", "6701126635" }
+
+local function playSoundWithRandomPitch(parent: Instance, soundId: string, volume: number?)
+	local s = Instance.new("Sound")
+	s.SoundId = soundId
+	s.Volume = volume or 1
+	s.PlaybackSpeed = 0.9 + math.random() * 0.2
+	s.Parent = parent
+	s:Play()
+	Debris:AddItem(s, 3)
+end
 
 local TrashClass = {}
 TrashClass.__index = TrashClass
 
 export type TrashClass = {
 	model: Model?,
+	owner: Player?,
 	debug: boolean,
 	_cleaned: boolean,
 	_connection: RBXScriptConnection?,
 	_ancestryConnection: RBXScriptConnection?,
 	_bounding: Part?,
-	_owner: Player?,
 
-	new: (model: Model, debug: boolean) -> TrashClass,
+	new: (owner: Player?, model: Model, debug: boolean) -> TrashClass,
 	CreateBounding: (self: TrashClass) -> string?,
 	StartHitbox: (self: TrashClass) -> (),
 	ProcessHit: (self: TrashClass, character: Model) -> (), -- New Method
 	Clean: (self: TrashClass) -> (),
 }
 
-function TrashClass.new(owner: Player, model: Model, debug: boolean): TrashClass
+function TrashClass.new(owner: Player?, model: Model, debug: boolean): TrashClass
 	local self = setmetatable({}, TrashClass) :: any
 	self.model = model
+	self.owner = owner
 	self.debug = debug
 	self._cleaned = false
 
@@ -110,13 +122,8 @@ function TrashClass:ProcessHit(character: Model)
 	end)
 
 	if player and player:HasTag("hasShield") then
-		warn(`${player} has hit`)
-		local sound = Instance.new("Sound")
-		sound.Parent = root
-		sound.SoundId = "rbxassetid://130409300190276"
-		sound.Volume = 1
-		sound:Play()
-		Debris:AddItem(sound, 2)
+		playSoundWithRandomPitch(root, SFX_HAMMER_IMPACT, 1)
+		SpawnGeneralVFX("TrashHit", character:GetPivot(), 3)
 
 		local trashModel = self.model :: Model
 		local trashPart = trashModel.PrimaryPart
@@ -145,15 +152,14 @@ function TrashClass:ProcessHit(character: Model)
 	end
 
 	local isFinalBlow = (humanoid.Health - 25) <= 0
-	local soundId = isFinalBlow and DEATH_SOUNDS[math.random(1, #DEATH_SOUNDS)]
-		or IMPACT_SOUNDS[math.random(1, #IMPACT_SOUNDS)]
+	local soundId = isFinalBlow and SFX_DEATH or IMPACT_SOUNDS[math.random(1, #IMPACT_SOUNDS)]
 
 	if isFinalBlow and self.owner then
 		ServerEvents.onGarbageManKill:Fire(self.owner)
 	end
 
 	local sound = Instance.new("Sound")
-	sound.SoundId = `rbxassetid://{soundId}`
+	sound.SoundId = type(soundId) == "string" and soundId or ("rbxassetid://" .. tostring(soundId))
 	sound.Volume = 3
 	sound.Parent = root
 	sound:Play()
@@ -194,9 +200,14 @@ function TrashClass:StartHitbox()
 			-- ? Wall Mechanic
 			if touchedModel:HasTag("WallObstacle") then
 				local wall = touchedModel
+				local trashModel = self._bounding.Parent
+				local trashRoot = trashModel.PrimaryPart
+				if trashRoot then
+					playSoundWithRandomPitch(trashRoot, SFX_HAMMER_IMPACT, 1)
+				end
 				local wallSize = wall:GetExtentsSize()
 				local wallCF = wall:GetPivot() :: CFrame
-				local trashModel = self._bounding.Parent
+				SpawnGeneralVFX("TrashHit", wallCF * CFrame.new(0, wallSize.Y / 2, 0), 3)
 
 				trashModel.PrimaryPart.AssemblyAngularVelocity = Vector3.zero
 				trashModel.PrimaryPart.AssemblyLinearVelocity = Vector3.zero

@@ -7,6 +7,8 @@ export type TemplateType = {
 	dayStreak: number,
 	claimedReward: boolean,
 	todayClaimed: boolean,
+	dailyRewardsUnlocked: boolean,
+	claimedDailyDays: { number },
 	passes: {
 		["2x_coins"]: boolean,
 		["2x_garbage_man"]: boolean,
@@ -22,6 +24,9 @@ return {
 	lastLogin = 0,
 	dayStreak = 0,
 	claimedReward = false,
+	todayClaimed = false,
+	dailyRewardsUnlocked = false,
+	claimedDailyDays = {},
 	passes = {
 		passAbility = false,
 		vip = false,

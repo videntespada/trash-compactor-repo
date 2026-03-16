@@ -52,19 +52,9 @@ return {
 		end
 
 		local function attachVisulization()
-			if not currentModel then
-				return
-			end
-			if not currentModel:HasTag("visualized") then
-				local highlight = Instance.new("Highlight")
-				highlight.Parent = currentModel
-				highlight.DepthMode = Enum.HighlightDepthMode.Occluded
-				highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-				highlight.OutlineTransparency = 0
-				highlight.FillColor = Color3.fromRGB(255, 0, 0)
-				highlight.FillTransparency = 0.4
-				currentModel:AddTag("visualized")
-			end
+			-- Red trash highlight for the Garbageman has been intentionally disabled.
+			-- Keeping this function as a no-op so the rest of the controller logic
+			-- does not need to change.
 		end
 
 		-- Cleans up connections/UI but OPTIONALLY keeps the model

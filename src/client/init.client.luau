@@ -5,21 +5,24 @@ local StarterGui = game:GetService("StarterGui")
 
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 
--- Disable character reset: CoreScripts may register ResetButtonCallback after we run, so retry.
-local function disableReset()
-	local ok = pcall(function()
-		StarterGui:SetCore("ResetButtonCallback", false)
-	end)
-	return ok
-end
-task.spawn(function()
-	for _ = 1, 30 do
-		if disableReset() then
-			break
-		end
-		task.wait(0.2)
-	end
-end)
+-- Disable character reset on all platforms (PC and mobile).
+-- Use a no-op callback instead of false so mobile respects it; CoreScripts can re-register later so we re-apply.
+-- local function disableReset()
+-- 	pcall(function()
+-- 		StarterGui:SetCore("ResetButtonCallback", function() end)
+-- 	end)
+-- end
+
+-- task.spawn(function()
+-- 	for _ = 1, 60 do
+-- 		disableReset()
+-- 		task.wait(0.2)
+-- 	end
+-- 	while true do
+-- 		disableReset()
+-- 		task.wait(5)
+-- 	end
+-- end)
 
 local player = Players.LocalPlayer
 local PlayerScripts = player.PlayerScripts

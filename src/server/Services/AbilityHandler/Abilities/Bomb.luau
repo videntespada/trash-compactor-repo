@@ -4,9 +4,12 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
-local isSimilar = require(ReplicatedStorage.Shared.Fusion.Utility.isSimilar)
+
+local SFX_BOMB_THROW = "rbxassetid://80722315074885"
+
+-- Template: Cooldown 10s, instant impact, 20 stud radius (damage/trash logic in AbilityHandler)
 return {
-	Cooldown = 5,
+	Cooldown = 10,
 	init = function(player: Player, AssetFolder: Folder)
 		local Map = workspace:WaitForChild("Map") :: Folder
 		local BombModel = AssetFolder:FindFirstChild("Bomb") :: Model
@@ -14,7 +17,15 @@ return {
 		if not character then
 			return
 		end
-
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root then
+			local sound = Instance.new("Sound")
+			sound.SoundId = SFX_BOMB_THROW
+			sound.Volume = 1
+			sound.Parent = root
+			sound:Play()
+			Debris:AddItem(sound, 4)
+		end
 		local startPos = character:FindFirstChild("HumanoidRootPart").CFrame
 		local endPos
 

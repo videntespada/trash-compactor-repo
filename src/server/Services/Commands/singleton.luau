@@ -4,6 +4,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local TextChatService = game:GetService("TextChatService")
 
 local Data = require(ServerScriptService.Server.Modules.DataStore.Data)
+local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
 
 return {
@@ -38,6 +39,23 @@ return {
 			return s and tonumber(s)
 		end
 
+		local function normalizeEventName(raw: string?): "Avalanche" | "Fog" | "Ice" | "None" | nil
+			if not raw then
+				return nil
+			end
+			local key = string.lower(raw)
+			if key == "avalanche" then
+				return "Avalanche"
+			elseif key == "fog" then
+				return "Fog"
+			elseif key == "ice" then
+				return "Ice"
+			elseif key == "none" then
+				return "None"
+			end
+			return nil
+		end
+
 		-- Text Chat commands (works when player.Chatted does not fire)
 		pcall(function()
 			local coinsCmd = Instance.new("TextChatCommand")
@@ -63,6 +81,25 @@ return {
 				if amount and amount > 0 then giveCrowns(player, amount) end
 			end)
 			crownsCmd.Parent = TextChatService
+
+			local eventCmd = Instance.new("TextChatCommand")
+			eventCmd.Name = "EventCommand"
+			eventCmd.PrimaryAlias = "/event"
+			eventCmd.Triggered:Connect(function(textSource, message)
+				local player = Players:GetPlayerByUserId(textSource.UserId)
+				if not player or not allowedUsers[player.UserId] then
+					return
+				end
+				local parts = string.split(message, " ")
+				local rawEvent = parts[2]
+				local normalized = normalizeEventName(rawEvent)
+				if not normalized then
+					warn("[Commands] /event requires one of: Avalanche, Fog, Ice, None")
+					return
+				end
+				ServerEvents.sendRoundEvent:Fire(normalized)
+			end)
+			eventCmd.Parent = TextChatService
 		end)
 
 		-- Legacy chat / client-fired commands
@@ -93,6 +130,13 @@ return {
 				else
 					warn("crowns command requires a positive number, e.g. /crowns 5")
 				end
+			elseif what == "event" then
+				local normalized = normalizeEventName(value)
+				if not normalized then
+					warn("[Commands] event command requires one of: Avalanche, Fog, Ice, None")
+					return
+				end
+				ServerEvents.sendRoundEvent:Fire(normalized)
 			end
 		end)
 	end,

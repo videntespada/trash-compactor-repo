@@ -1,9 +1,11 @@
+local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Data = require(ServerScriptService.Server.Modules.DataStore.Data)
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
+local RushModeState = require(ServerScriptService.Server.Modules.RushModeState)
 local Charm = require(ReplicatedStorage.Packages.Charm)
 local atom = Charm.atom
 local subscribe = Charm.subscribe
@@ -30,13 +32,14 @@ local AFK_WARN_SECONDS = 10
 local AFK_END_SECONDS = 20
 
 local RUSH_THRESHOLD_SECONDS = 20 -- When this many seconds left, throw cooldown is reduced
+local SFX_DEATH_OR_GM_FAIL = "rbxassetid://74019976925686"
 
 local lobbyTime = 15
 local intermissionTime = 5
 local roundLength = 60
 local playersNeeded = 2
 
-local eventFunctions: { [string]: (timeLeft: number, ...any) -> () } = {}
+local eventFunctions: { [string]: () -> () } = {}
 
 local AliveFolder = workspace:WaitForChild("Alive") :: Folder
 local IgnoreFolder = workspace:WaitForChild("Ignore") :: Folder
@@ -104,6 +107,15 @@ function addDeathConnection(player: Player)
 	end
 
 	local conn = humanoid.Died:Connect(function()
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root then
+			local sound = Instance.new("Sound")
+			sound.SoundId = SFX_DEATH_OR_GM_FAIL
+			sound.Volume = 1
+			sound.Parent = root
+			sound:Play()
+			Debris:AddItem(sound, 4)
+		end
 		playerStates(function(old)
 			local new = table.clone(old)
 			new[player] = nil
@@ -139,6 +151,15 @@ local function transferPlayersToRound()
 	end
 end
 
+local function broadcastPickingGarbageman(plr: Player?)
+	if not plr then
+		return
+	end
+	for _, client in ipairs(Players:GetPlayers()) do
+		EventHandler:fireClient(client, "displayPickingGarbageman", plr)
+	end
+end
+
 local function chooseGarbageMan()
 	--! Immediately check if someone purchased to become garbage man next round.
 	if #nextGarbageManTable > 0 then
@@ -148,11 +169,13 @@ local function chooseGarbageMan()
 		if chosen and chosen.Parent == Players then
 			if garbageMan() == nil then
 				garbageMan(chosen)
+				broadcastPickingGarbageman(chosen)
 			end
 
 			for i, waitingPlr in ipairs(nextGarbageManTable) do
 				warn(`{waitingPlr.Name} is still in queue (Position {i}).`)
-				EventHandler:fireClient(waitingPlr, "sendNotification", `You are still in the queue for Garbage Man. You will be chosen in {i} rounds.`)
+				-- Inform players in GM queue: neutral notification
+				EventHandler:fireClient(waitingPlr, "sendNotification", `🕐 You're next Garbageman in {i} rounds!`, 137502807803779, "Normal")
 			end
 
 			return chosen
@@ -199,13 +222,14 @@ local function chooseGarbageMan()
 		local randomPoint = math.random() * fallbackTotal
 		local currentCount = 0
 
-		for _, entry in ipairs(weightedPlayers) do
-			currentCount += entry.weight
-			if currentCount >= randomPoint then
-				garbageMan(entry.player)
-				return entry.player
-			end
-		end
+				for _, entry in ipairs(weightedPlayers) do
+					currentCount += entry.weight
+					if currentCount >= randomPoint then
+						garbageMan(entry.player)
+						broadcastPickingGarbageman(entry.player)
+						return entry.player
+					end
+				end
 	end
 
 	local randomPoint = math.random() * total
@@ -218,6 +242,7 @@ local function chooseGarbageMan()
 
 		if currentCount >= randomPoint then
 			garbageMan(plr)
+			broadcastPickingGarbageman(plr)
 			return plr
 		end
 	end
@@ -244,6 +269,15 @@ local function onTouch(hitPart: BasePart)
 		return
 	end
 
+	local root = characterModel:FindFirstChild("HumanoidRootPart")
+	if root then
+		local sound = Instance.new("Sound")
+		sound.SoundId = SFX_DEATH_OR_GM_FAIL
+		sound.Volume = 1
+		sound.Parent = root
+		sound:Play()
+		Debris:AddItem(sound, 4)
+	end
 	humanoid.Health = 0
 
 	local states = playerStates()
@@ -294,8 +328,10 @@ local function processQueue()
 
 			local handler = eventFunctions[nextEventName]
 			if handler then
-				local timeLeft = lobbyTime - timeCounter()
-				handler(timeLeft)
+				local ok, err = pcall(handler)
+				if not ok then
+					warn(`[RoundService] Error running round event {nextEventName}: {err}`)
+				end
 			end
 
 			if roundState() ~= "InRound" then
@@ -313,9 +349,14 @@ local function awardRewards()
 	local finalStates = playerStates()
 	local gm: Player = garbageMan()
 	local survivorsLeft = 0
-	local COINS_PER_SECOND = 0.5
-	local COINS_PER_KILL = 1.3
-	local WIN_BONUS_COINS = 10
+
+	-- SURVIVOR EARNINGS: per second 2 coins, win bonus 75
+	local COINS_PER_SECOND = 2
+	local SURVIVOR_WIN_BONUS = 75
+
+	-- GARBAGEMAN EARNINGS: per kill 30 coins, win bonus (all dead) 120
+	local COINS_PER_KILL = 30
+	local GM_WIN_BONUS = 120
 
 	-- Count remaining survivors
 	for plr, stats in pairs(finalStates) do
@@ -331,32 +372,22 @@ local function awardRewards()
 	for plr, stats in pairs(finalStates) do
 		if plr ~= gm then
 			local plrData = Data.grabData(plr)
-			-- Participating Coins (Based on survival time/participation)
 			local timeSurvived = stats.survivedTime
 			local coinsEarned = math.floor(timeSurvived * COINS_PER_SECOND)
 			local crownsEarned = 0
 
 			if survivorsWon then
-				--  Add Win Bonus & Trophy
-				coinsEarned += WIN_BONUS_COINS
+				coinsEarned += SURVIVOR_WIN_BONUS
 				crownsEarned = 1
 				plrData.crowns += 1
 			end
 
-			local earnedParts: { string } = {}
-			if coinsEarned > 0 then
-				table.insert(earnedParts, `{coinsEarned} coins`)
-			end
-			if crownsEarned > 0 then
-				table.insert(earnedParts, `{crownsEarned} trophy`)
-			end
-			local earnedSuffix = #earnedParts > 0 and (" You earned " .. table.concat(earnedParts, " and ") .. ".") or ""
-
-			if survivorsWon then
-				EventHandler:fireClient(plr, "sendNotification", "You won the round!" .. earnedSuffix)
-			else
-				EventHandler:fireClient(plr, "sendNotification", "You survived the round!" .. earnedSuffix)
-			end
+			local msg = if survivorsWon
+				then `🎉 You survived! +{coinsEarned} coins +{crownsEarned} 🏆`
+				else `💪 Nice effort! +{coinsEarned} coins +{crownsEarned} 🏆`
+			local sfxId = if survivorsWon then 122324955203867 else 137908167664234
+			-- Round reward summary: positive outcome with currency gains
+			EventHandler:fireClient(plr, "sendNotification", msg, sfxId, "Currency")
 			Data.mutateCurrency(plr, "coins", plrData.coins + coinsEarned)
 			Data.mutateCurrency(plr, "crowns", plrData.crowns + crownsEarned)
 		end
@@ -364,30 +395,19 @@ local function awardRewards()
 
 	-- Handle Garbage Man Rewards
 	if gm then
-		-- Participation Coins
-		local coinsRewarded = 25
-		local crownsEarned = 0
 		local gmData = Data.grabData(gm)
 		local gmState = playerStates()[gm]
+		local coinsRewarded = math.floor((gmState and gmState.kills or 0) * COINS_PER_KILL)
+		local crownsEarned = 0
 
 		if gmWon then
-			-- Trophy for eliminating everyone
-			crownsEarned += 1
-
-			-- Reward per death
-			coinsRewarded += math.floor(gmState.kills * COINS_PER_KILL)
+			crownsEarned = 1
+			coinsRewarded += GM_WIN_BONUS
 		end
 
-		local gmEarnedParts: { string } = {}
-		if coinsRewarded > 0 then
-			table.insert(gmEarnedParts, `{coinsRewarded} coins`)
-		end
-		if crownsEarned > 0 then
-			table.insert(gmEarnedParts, `{crownsEarned} crowns`)
-		end
-		local gmEarnedSuffix = #gmEarnedParts > 0 and (" You earned " .. table.concat(gmEarnedParts, " and ") .. ".") or ""
 		if gmWon then
-			EventHandler:fireClient(gm, "sendNotification", "You are the Garbage Man!" .. gmEarnedSuffix)
+			-- GM win with currency reward
+			EventHandler:fireClient(gm, "sendNotification", `💀 Total wipeout! +{coinsRewarded} coins +{crownsEarned} 🏆`, 122324955203867, "Currency")
 		end
 
 		Data.mutateCurrency(gm, "coins", gmData.coins + coinsRewarded)
@@ -399,7 +419,7 @@ ServerEvents.sendRoundEvent:Connect(function(eventName: types.EventStates)
 	eventQueue(function(old): { "Avalanche" | "Fog" | "Ice" | "None" }
 		local new = table.clone(old)
 		table.insert(new, eventName)
-		-- EventHandler:broadcast("sendNotification", `Your ${eventName} event will play in {#old} rounds.`)
+		-- EventHandler:broadcast("sendNotification", `Your {eventName} event will play in {#old} rounds.`)
 		return new
 	end)
 	warn(`Added ${eventName}`)
@@ -457,7 +477,7 @@ ServerEvents.forceChooseGarbageMan:Connect(function(player: Player)
 	-- If they aren't the only one in the queue, warn them they are waiting
 	if #nextGarbageManTable > 1 then
 		warn(`{player.Name} bought Garbage Man, but there is a queue. They are position {#nextGarbageManTable}.`)
-		EventHandler:fireClient(player, "sendNotification", `You bought Garbage Man! But there is a queue. You're in position {#nextGarbageManTable}.`)
+		EventHandler:fireClient(player, "sendNotification", `📋 You're #${#nextGarbageManTable} in the Garbageman queue!`, nil, "Normal")
 	end
 end)
 
@@ -496,7 +516,7 @@ end)
 		-- ? Load events
 		local eventList = RoundEvents:GetChildren() :: { ModuleScript }
 		for _, module in ipairs(eventList) do
-			local f = require(module) :: (timeLeft: number) -> ()
+			local f = require(module) :: () -> ()
 			eventFunctions[module.Name] = f
 		end
 
@@ -512,6 +532,11 @@ end)
 			for plr, _ in prev do
 				if not state[plr] then
 					plr:RemoveTag("InRound")
+
+					-- Inform client UI they are no longer in round (hide ability icon, etc.)
+					if plr and plr.Parent == Players then
+						EventHandler:fireClient(plr, "abilityInRound", false)
+					end
 
 					-- If the person who died/left was the Garbage Man, clear the atom
 					if garbageMan() == plr then
@@ -531,18 +556,21 @@ end)
 					-- This was the player who was added
 					if plr and plr.Parent == Players then
 						plr:AddTag("InRound")
+						-- Inform client UI they are now in round
+						EventHandler:fireClient(plr, "abilityInRound", true)
 					end
 					addDeathConnection(plr)
 				end
 			end
 		end)
 
-		-- ? Change in count of normal players in round
+		-- ? Change in count of survivors only (exclude garbageman); depend on garbageMan() so count updates when GM is chosen
 		local nonGarbageManCount = computed(function()
 			local states = playerStates()
+			local gm = garbageMan()
 			local count = 0
 			for plr, _ in states do
-				if not plr:HasTag("GarbageMan") then
+				if plr ~= gm then
 					count += 1
 				end
 			end
@@ -611,11 +639,35 @@ end)
 			currentMusic = sound
 		end)
 
+		local function applyGarbageManScale(plr: Player, scale: number)
+			local character = plr.Character
+			if not character then
+				return
+			end
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if not humanoid then
+				return
+			end
+
+			local function setScaleValue(name: string, value: number)
+				local obj = humanoid:FindFirstChild(name)
+				if obj and obj:IsA("NumberValue") then
+					obj.Value = value
+				end
+			end
+
+			setScaleValue("BodyDepthScale", scale)
+			setScaleValue("BodyWidthScale", scale)
+			setScaleValue("BodyHeightScale", scale)
+			setScaleValue("HeadScale", scale)
+		end
+
 		-- ? garbage man subscriber
 		subscribe(garbageMan, function(newMan: Player?, oldMan: Player?)
 			-- 1. Remove from the previous guy
 			if oldMan then
 				oldMan:RemoveTag("GarbageMan")
+				applyGarbageManScale(oldMan, 1)
 			end
 
 			-- 2. Add to the new guy
@@ -624,10 +676,12 @@ end)
 				for _, plr in Players:GetPlayers() do
 					if plr ~= newMan and plr:HasTag("GarbageMan") then
 						plr:RemoveTag("GarbageMan")
+						applyGarbageManScale(plr, 1)
 					end
 				end
 
 				newMan:AddTag("GarbageMan")
+				applyGarbageManScale(newMan, 2)
 			end
 		end)
 
@@ -635,13 +689,6 @@ end)
 		subscribe(roundState, function(s: types.RoundStates, _prev: types.RoundStates)
 			if s == "Lobby" then
 				print()
-			elseif s == "InRound" then
-				showGarbageManPurchase(false)
-				transferPlayersToRound()
-				chooseGarbageMan()
-				teleportPlayers("Round")
-
-				processQueue()
 			elseif s == "Intermission" then
 				awardRewards()
 				teleportPlayers("Spawn")
@@ -656,23 +703,29 @@ end)
 			end
 		end)
 
-		-- Shared state for rush mode (GarbageManHandler reads this; no cross-require)
-		local serverFolder = ServerScriptService:WaitForChild("Server") :: Folder
-		local existing = serverFolder:FindFirstChild("RushMode")
-		local rushModeValue: BoolValue = if existing and existing:IsA("BoolValue") then existing else (function()
-			local v = Instance.new("BoolValue")
-			v.Name = "RushMode"
-			v.Value = false
-			v.Parent = serverFolder
-			return v
-		end)()
+		local rushMode = RushModeState.rushMode
+
+		-- Players who have fired "pickingDone" this round (reset each picking phase).
+		local pickingDoneSet = atom({} :: { [Player]: true })
+
+		EventHandler:connect("pickingDone", function(player: Player)
+			pickingDoneSet(function(old)
+				if old[player] then
+					return old
+				end
+				local next_ = table.clone(old)
+				next_[player] = true
+				return next_
+			end)
+		end)
 
 		while true do
 			roundState("Lobby")
 
 			while not checkForPlayers() do
 				local total = #Players:GetPlayers()
-				EventHandler:broadcast("sendNotification", `Not enough players to start the round. Need {playersNeeded - total} more.`)
+				-- Not enough players to start: neutral info
+				EventHandler:broadcast("sendNotification", `⏳ Waiting for ${playersNeeded - total} more players!`, 137502807803779, "Normal")
 				task.wait(15)
 			end
 
@@ -681,11 +734,50 @@ end)
 				task.wait(1)
 			end
 
-			EventHandler:broadcast("sendNotification", "Round starting!")
+			-- Move players into round state and choose Garbageman, but hold off all
+			-- round UI/music/timers until the picking animation has played.
+			showGarbageManPurchase(false)
+			transferPlayersToRound()
+			local _chosenGm = chooseGarbageMan()
+
+			-- After choosing the Garbageman, wait for all in-round players' picking
+			-- animations to complete on the client, then add a small buffer.
+			do
+				pickingDoneSet({})
+				local states = playerStates()
+				local expectedCount = 0
+				for plr, _ in states do
+					if plr and plr.Parent == Players then
+						expectedCount += 1
+					end
+				end
+
+				local waited = 0
+				local maxWait = 12
+				while true do
+					local reported = pickingDoneSet()
+					local reportedCount = 0
+					for _ in reported do
+						reportedCount += 1
+					end
+					if reportedCount >= expectedCount or waited >= maxWait then
+						break
+					end
+					task.wait(0.25)
+					waited += 0.25
+				end
+
+				-- Extra buffer after animations have finished.
+				task.wait(2)
+			end
+
+			-- Now start the actual round: notification, state, timers, music, etc.
+			-- Round start: positive hype
+			EventHandler:broadcast("sendNotification", "🗑️ Here comes the trash!", 137502807803779, "Positive")
 			roundState("InRound")
 			hasThrownThisRound(false)
 			forceEndRoundAfk(false)
-			rushModeValue.Value = false
+			rushMode(false)
 			local hasNotifiedRush = false
 
 			-- Anti-AFK: warn at 10s, end round at 20s if garbageman hasn't thrown
@@ -699,17 +791,33 @@ end)
 					return
 				end
 				if not hasThrownThisRound() then
-					EventHandler:fireClient(gm, "sendNotification", "Wake up! Throw some trash!")
+					-- AFK warning: negative
+					EventHandler:fireClient(gm, "sendNotification", "⚠️ Throw something! You're the Garbageman!", 137502807803779, "Negative")
 				end
 				task.wait(AFK_END_SECONDS - AFK_WARN_SECONDS)
 				if roundState() ~= "InRound" or garbageMan() ~= gm then
 					return
 				end
 				if not hasThrownThisRound() then
-					EventHandler:fireClient(gm, "sendNotification", "Round ended — you were AFK!")
+					-- AFK ended round: negative
+					EventHandler:fireClient(gm, "sendNotification", "😴 You went AFK! Round over.", 137908167664234, "Negative")
+					local gmChar = gm.Character
+					local gmRoot = gmChar and gmChar:FindFirstChild("HumanoidRootPart")
+					if gmRoot then
+						local sound = Instance.new("Sound")
+						sound.SoundId = SFX_DEATH_OR_GM_FAIL
+						sound.Volume = 1
+						sound.Parent = gmRoot
+						sound:Play()
+						Debris:AddItem(sound, 4)
+					end
 					forceEndRoundAfk(true)
 				end
 			end)
+
+			-- Teleport everyone into the arena and start processing queued round events
+			teleportPlayers("Round")
+			processQueue()
 
 			for i = roundLength, 0, -1 do
 				timeCounter(i)
@@ -717,10 +825,11 @@ end)
 				-- Notify GM once when rush mode starts (20 seconds left); set shared state for throw cooldown
 				if i <= RUSH_THRESHOLD_SECONDS and not hasNotifiedRush then
 					hasNotifiedRush = true
-					rushModeValue.Value = true
+					rushMode(true)
 					local gm = garbageMan()
 					if gm then
-						EventHandler:fireClient(gm, "sendNotification", "Rush mode! Throw cooldown reduced!")
+						-- Rush mode: positive buff for GM
+						EventHandler:fireClient(gm, "sendNotification", "⚡ RUSH MODE! Throw faster!", 137502807803779, "Positive")
 					end
 				end
 
@@ -741,7 +850,7 @@ end)
 			end
 
 			roundState("Intermission")
-			rushModeValue.Value = false
+			rushMode(false)
 
 			for i = intermissionTime, 0, -1 do
 				timeCounter(i)
@@ -756,5 +865,7 @@ end)
 		"onDeathScreen",
 		"requestRevive",
 		"becomeGarbageManToggle",
+		"abilityInRound",
+		"displayPickingGarbageman",
 	},
 }

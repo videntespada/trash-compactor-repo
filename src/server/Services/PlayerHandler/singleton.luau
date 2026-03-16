@@ -21,7 +21,7 @@ return {
 
 			-- Test notification
 			-- task.delay(4, function()
-			-- 	EventHandler:fireClient(player, "sendNotification", `Welcome to the game! You have {plrData.coins} coins and {plrData.crowns} crowns.`)
+			-- 	EventHandler:fireClient(player, "sendNotification", `🗑️ Welcome to Trash Compactor!`, 137502807803779, "Positive")
 			-- end)
 
 			task.delay(5, function()

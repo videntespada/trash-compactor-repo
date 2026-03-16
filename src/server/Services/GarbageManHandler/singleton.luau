@@ -7,6 +7,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local TrashClass = require(ServerScriptService.Server.Classes.TrashClass)
 local ServerEvents = require(ServerScriptService.Server.ServerEvents)
 local EventHandler = require(ReplicatedStorage.Shared.EventHandler)
+local RushModeState = require(ServerScriptService.Server.Modules.RushModeState)
 
 local NORMAL_THROW_COOLDOWN = 1
 local RUSH_THROW_COOLDOWN = 0.5
@@ -60,16 +61,10 @@ return {
 				debug(`throwTrash: chose new trash, toThrow={toThrow and toThrow.Name or "nil"}`)
 			end
 
-			-- Debounce: much shorter when 20 seconds or less left (rush mode) via shared BoolValue from RoundService
-			local cooldown = NORMAL_THROW_COOLDOWN
-			do
-				local server = ServerScriptService:FindFirstChild("Server")
-				local rushVal = server and server:FindFirstChild("RushMode")
-				if rushVal and rushVal:IsA("BoolValue") and rushVal.Value then
-					cooldown = RUSH_THROW_COOLDOWN
-				end
-			end
+			-- Debounce: much shorter when 20 seconds or less left (rush mode) via shared atom from RushModeState
+			local cooldown = if RushModeState.rushMode() then RUSH_THROW_COOLDOWN else NORMAL_THROW_COOLDOWN
 			player:AddTag("ThrowDB")
+			EventHandler:fireClient(player, "throwCooldown", cooldown)
 			task.delay(cooldown, function()
 				player:RemoveTag("ThrowDB")
 			end)
@@ -112,7 +107,7 @@ return {
 			local sound = Instance.new("Sound")
 			sound.Parent = character.PrimaryPart
 			sound.SoundId = "rbxassetid://9118617342"
-			sound.Volume = 2
+			sound.Volume = 0.8
 			sound.Ended:Once(function()
 				sound:Destroy()
 			end)
@@ -178,5 +173,6 @@ return {
 		"throwTrash",
 		"toggleGarbageVisualization",
 		"changeTrash",
+		"throwCooldown",
 	},
 }

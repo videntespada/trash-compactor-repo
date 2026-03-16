@@ -39,9 +39,9 @@ return {
 				return
 			end
 
-			-- /coins and /crowns are handled only by server TextChatCommand to avoid double-apply.
+			-- /coins, /crowns and /event are handled only by server TextChatCommand to avoid double-apply.
 			-- If you use legacy chat and Chatted fires, the server still runs the command once via TextChatCommand.
-			-- So we do not fire onCommandSend for coins/crowns here.
+			-- So we do not fire onCommandSend for coins/crowns/event here.
 			if command == COMMAND_PREFIX .. "coins" then
 				local value = args[2]
 				local amount = value and tonumber(value)

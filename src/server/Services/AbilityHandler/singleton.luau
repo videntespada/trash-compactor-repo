@@ -1,9 +1,7 @@
 local Debris = game:GetService("Debris")
-local _Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local RagdollModule = require(ReplicatedStorage.Shared.RagdollModule)
 local Charm = require(ReplicatedStorage.Packages.Charm)
 local atom = Charm.atom
 local types = require(script.Parent.types)
@@ -39,23 +37,33 @@ return {
 		EventHandler:connect("sendAbilityUse", function(player: Player)
 			local dta = safeGrabData(player)
 			if dta == nil then
+				warn(`[AbilityHandler] sendAbilityUse: no data for {player.Name}`)
 				return
 			end
 			if not player:HasTag("InRound") then
-				EventHandler:fireClient(player, "sendNotification", "Can't use abilities while you are not in the round.")
+				-- Error: trying to use ability outside round
+				EventHandler:fireClient(player, "sendNotification", "🚫 Wait for the round to start!", 128635936514965, "Negative")
 				warn(`${player} isn't in round`)
 				return
 			end
+			local char = player.Character
+			if char and char:GetAttribute("Ragdolled") then
+				EventHandler:fireClient(player, "sendNotification", "🚫 Can't use abilities while ragdolled!", 128635936514965, "Negative")
+				return
+			end
 			if player:HasTag("GarbageMan") then
-				EventHandler:fireClient(player, "sendNotification", "Can't use abilities while you are the garbage man.")
+				-- Error: GM cannot use abilities
+				EventHandler:fireClient(player, "sendNotification", "🚫 Garbageman can't use abilities!", 128635936514965, "Negative")
 				return
 			end
 			local ability = dta.ability
 			local handler = abilityList[ability]
-			print(abilityList)
+			if not ability or ability == "" then
+				warn(`[AbilityHandler] sendAbilityUse: no equipped ability for {player.Name}`)
+			end
 
 			if not handler then
-				warn("Cannot find ability name.")
+				warn(`[AbilityHandler] sendAbilityUse: cannot find ability handler for "{ability}"`)
 				return
 			end
 
@@ -70,7 +78,8 @@ return {
 
 			if timeSinceLastUsed < cd then
 				local waitTime = math.ceil(cd - timeSinceLastUsed)
-				EventHandler:fireClient(player, "sendNotification", `Ability on cooldown! Wait ${waitTime}s`)
+				-- Error: ability on cooldown
+				EventHandler:fireClient(player, "sendNotification", `⏳ Cooldown! {waitTime}s`, 128635936514965, "Negative")
 				return
 			end
 
@@ -83,11 +92,19 @@ return {
 				}
 				return new
 			end)
+
+			-- Inform the client to show the cooldown state for this ability.
+			EventHandler:fireClient(player, "abilityCooldown", cd)
 		end)
 
 		EventHandler:connect("equipAbility", function(player: Player, ability: string)
 			local dta = safeGrabData(player)
 			if not dta then return end
+
+			if player:HasTag("InRound") then
+				EventHandler:fireClient(player, "sendNotification", "🚫 Can't switch abilities during a round!", 128635936514965, "Negative")
+				return
+			end
 
 			local equippedAbility = dta.ability
 			local newAbility = ability
@@ -118,18 +135,21 @@ return {
 
 			local alreadyOwned = (table.find(dta.abilityInventory, ability) ~= nil) or (dta.ability == ability)
 			if alreadyOwned then
-				EventHandler:fireClient(player, "sendNotification", "You already own this ability.")
+				-- Informational: they already own this ability (treat as negative/neutral)
+				EventHandler:fireClient(player, "sendNotification", "✅ You already have this!", 128635936514965, "Negative")
 				warn(`${player.Name} already has ${ability}`)
 				return
 			end
 
 			local cost = SharedState.abilityCost[ability]
 			if not cost then
-				EventHandler:fireClient(player, "sendNotification", "This ability is not available.")
+				-- Error: ability not available for purchase
+				EventHandler:fireClient(player, "sendNotification", "🔒 Not available yet!", 128635936514965, "Negative")
 				return
 			end
 			if dta.coins < cost then
-				EventHandler:fireClient(player, "sendNotification", `Not enough coins to buy this ability. You need ${cost} coins.`)
+				-- Currency-specific error: not enough coins
+				EventHandler:fireClient(player, "sendNotification", `💰 You need {cost} coins for this!`, 128635936514965, "Currency")
 				warn(`${player.Name} does not have enough coins to buy ${ability}`)
 				return
 			end
@@ -154,26 +174,16 @@ return {
 		ServerEvents.sendBombLocation:Connect(function(location)
 			bombFinishLocation = location
 		end)
-		EventHandler:connect("onBombFinish", function(player: Player)
-			local pos = bombFinishLocation -- Assuming this is a Vector3 defined in your scope
+		EventHandler:connect("onBombFinish", function(_player: Player)
+			local pos = bombFinishLocation
 			if not pos then
 				return
 			end
 
-			-- 1. Configuration
-			local BLAST_RADIUS = 30
-			local BLAST_DAMAGE = 5
-			local RAGDOLL_TIME = 2
-			local PUSH_FORCE = 60
-
-			-- 2. Define the OverlapParams for the spatial query
+			local BLAST_RADIUS = 20 -- stud radius; bomb affects trash only (no player hit)
 			local params = OverlapParams.new()
 			params.FilterType = Enum.RaycastFilterType.Exclude
-			-- Exclude the bomb itself if it hasn't been destroyed yet
-			-- params.FilterDescendantsInstances = {bombInstance}
 
-			-- 3. Find everything in the blast radius
-			print(typeof(pos))
 			local finalPos: Vector3
 			if typeof(pos) == "CFrame" then
 				finalPos = pos.Position
@@ -181,8 +191,7 @@ return {
 				finalPos = pos
 			end
 			local partsInRadius = workspace:GetPartBoundsInRadius(finalPos, BLAST_RADIUS, params)
-
-			local processedModels = {} -- Debounce for models (trash/characters)
+			local processedModels = {}
 
 			for _, part in partsInRadius do
 				local model = part:FindFirstAncestorOfClass("Model")
@@ -191,14 +200,11 @@ return {
 				end
 				processedModels[model] = true
 
-				-- CASE A: Trash Models (workspace.Ignore.Trash)
 				if model:IsDescendantOf(workspace:WaitForChild("Ignore"):FindFirstChild("Trash")) then
-					-- Tell the framework to destroy/cleanup this trash
 					for _, v in ipairs(model:GetDescendants()) do
 						if v:IsA("Part") or v:IsA("MeshPart") then
 							v.AssemblyAngularVelocity = Vector3.zero
 							v.AssemblyLinearVelocity = Vector3.zero
-
 							local bv = Instance.new("BodyVelocity")
 							bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
 							bv.Velocity = Vector3.yAxis * 20
@@ -206,35 +212,7 @@ return {
 							Debris:AddItem(bv, 0.1)
 						end
 					end
-
 					ServerEvents.bombBreakTrash:Fire(model)
-					continue
-				end
-
-				-- CASE B: Players/Humanoids (AliveFolder)
-				local humanoid = model:FindFirstChildOfClass("Humanoid")
-				local root = model.PrimaryPart
-
-				-- Only hit players/NPCs in the "Alive" folder
-				if humanoid and root and model.Parent == workspace:WaitForChild("Alive") then
-					-- Damage
-					humanoid:TakeDamage(BLAST_DAMAGE)
-
-					-- Ragdoll
-					RagdollModule.TimedRagdoll(model, RAGDOLL_TIME)
-
-					-- Push Back Logic
-					local direction = (root.Position - pos).Unit
-					-- If the bomb is exactly on the root, default to Up
-					if direction ~= direction then
-						direction = Vector3.yAxis
-					end
-
-					local bv = Instance.new("BodyVelocity")
-					bv.MaxForce = Vector3.one * math.huge
-					bv.Velocity = (direction * PUSH_FORCE) + (Vector3.yAxis * 25)
-					bv.Parent = root
-					game:GetService("Debris"):AddItem(bv, 0.2)
 				end
 			end
 		end)
@@ -246,5 +224,6 @@ return {
 		"bombVFX",
 		"onBombFinish",
 		"requestAbilityInventory",
+		"abilityCooldown",
 	},
 }
